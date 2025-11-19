@@ -1,7 +1,7 @@
 // Aantal vakken per vrachtwagen
 const NUM_SLOTS = 33;
 
-// Globale state (in een echte app komt dit straks uit Supabase)
+// Globale state (nu nog volledig in memory)
 const state = {
   currentDayIndex: 0,          // 0 = vandaag, +1 = morgen, -1 = gisteren
   days: {},                    // key: dag-string -> { trucks: [...] }
@@ -20,24 +20,46 @@ const prevDayBtn = document.getElementById('prev-day-btn');
 const nextDayBtn = document.getElementById('next-day-btn');
 const dayLabelEl = document.getElementById('day-label');
 
+const dayHeaderEl = document.getElementById('day-header');
+const truckHeaderEl = document.getElementById('truck-header');
+const truckHeaderLabelEl = document.getElementById('truck-header-label');
+const prevTruckBtn = document.getElementById('prev-truck-btn');
+const nextTruckBtn = document.getElementById('next-truck-btn');
+const deleteTruckBtn = document.getElementById('delete-truck-btn');
+
 const backToListBtn = document.getElementById('back-to-list-btn');
-const detailTruckNameEl = document.getElementById('detail-truck-name');
 const slotsGridEl = document.getElementById('slots-grid');
 const ordersListEl = document.getElementById('orders-list');
 
-// Helpers voor dagen
+// Helpers voor datum
+
+function createDateByIndex(dayIndex) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + dayIndex);
+  return d;
+}
+
+function formatDate(d) {
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
 
 function getDayKey(dayIndex) {
-  const d = new Date();
-  d.setDate(d.getDate() + dayIndex);
+  const d = createDateByIndex(dayIndex);
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 function getDayLabel(dayIndex) {
-  if (dayIndex === 0) return 'Vandaag';
-  if (dayIndex === 1) return 'Morgen';
-  if (dayIndex === -1) return 'Gisteren';
-  return dayIndex > 0 ? `Over ${dayIndex} dagen` : `${Math.abs(dayIndex)} dagen geleden`;
+  const d = createDateByIndex(dayIndex);
+  const base = formatDate(d);
+
+  if (dayIndex === 0) return `Vandaag - ${base}`;
+  if (dayIndex === 1) return `Morgen - ${base}`;
+  if (dayIndex === -1) return `Gisteren - ${base}`;
+  return base;
 }
 
 // Dag initialiseren als hij nog niet bestaat
@@ -45,7 +67,7 @@ function getDayLabel(dayIndex) {
 function ensureDayExists(dayIndex) {
   const key = getDayKey(dayIndex);
   if (!state.days[key]) {
-    // Maak een nieuwe dag met 4 trucks en wat dummy orders
+    // Nieuwe dag met 1 truck en wat dummy orders
     state.days[key] = {
       trucks: createInitialTrucks()
     };
@@ -58,10 +80,8 @@ let nextOrderId = 1;
 
 function createInitialTrucks() {
   const trucks = [];
-  // standaard 4 trucks
-  for (let i = 1; i <= 4; i++) {
-    trucks.push(createTruck(`Truck ${i}`));
-  }
+  // standaard 1 truck
+  trucks.push(createTruck('Truck 1'));
   return trucks;
 }
 
@@ -95,6 +115,11 @@ function getCurrentDay() {
 function getTruckById(truckId) {
   const day = getCurrentDay();
   return day.trucks.find(t => t.id === truckId);
+}
+
+function getTruckIndex(truckId) {
+  const day = getCurrentDay();
+  return day.trucks.findIndex(t => t.id === truckId);
 }
 
 // RENDERING
@@ -134,6 +159,17 @@ function renderTruckList() {
 
 // Truck detail scherm
 
+function updateTruckHeader() {
+  const day = getCurrentDay();
+  if (!day || state.selectedTruckId == null) return;
+
+  const idx = getTruckIndex(state.selectedTruckId);
+  if (idx === -1) return;
+
+  const dLabel = getDayLabel(state.currentDayIndex);
+  truckHeaderLabelEl.textContent = `Truck ${idx + 1} van ${day.trucks.length} - ${dLabel}`;
+}
+
 function openTruckDetail(truckId) {
   state.selectedTruckId = truckId;
   state.selectedOrderId = null;
@@ -141,14 +177,15 @@ function openTruckDetail(truckId) {
   const truck = getTruckById(truckId);
   if (!truck) return;
 
-  detailTruckNameEl.textContent = truck.name || truckId;
-
   renderSlots(truck);
   renderOrders(truck);
+  updateTruckHeader();
 
-  // switch view
+  // switch view + headers
   truckListView.classList.remove('active-view');
   truckDetailView.classList.add('active-view');
+  dayHeaderEl.classList.add('hidden');       // dag-navigatie verbergen
+  truckHeaderEl.classList.remove('hidden');  // truck-navigatie tonen
 }
 
 function renderSlots(truck) {
@@ -163,7 +200,6 @@ function renderSlots(truck) {
       slotEl.classList.add('empty');
     } else {
       slotEl.classList.add('filled');
-      // laat bijvoorbeeld korte tekst zien
       const order = truck.orders.find(o => o.id === orderId);
       slotEl.textContent = order ? order.label.replace('Order ', '') : '?';
     }
@@ -212,7 +248,7 @@ function renderOrders(truck) {
 // INTERACTIE
 
 function handleOrderClick(orderId) {
-  // select/deselect logica
+  // select/deselect
   if (state.selectedOrderId === orderId) {
     state.selectedOrderId = null;
   } else {
@@ -222,7 +258,7 @@ function handleOrderClick(orderId) {
   const truck = getTruckById(state.selectedTruckId);
   if (!truck) return;
   renderOrders(truck);
-  renderSlots(truck); // eventueel highlight van mogelijke targets later
+  renderSlots(truck);
 }
 
 function handleSlotClick(truck, slotIndex) {
@@ -245,10 +281,65 @@ function handleSlotClick(truck, slotIndex) {
       state.selectedOrderId = null;
     }
   }
-  // (optioneel: extra logica voor vervangen/swap als je wilt)
 
   renderSlots(truck);
   renderOrders(truck);
+}
+
+// TRUCK-NAVIGATIE IN DETAIL-VIEW
+
+function goToPrevTruck() {
+  const day = getCurrentDay();
+  if (!day || day.trucks.length === 0 || state.selectedTruckId == null) return;
+
+  const idx = getTruckIndex(state.selectedTruckId);
+  if (idx === -1) return;
+
+  const newIndex = (idx - 1 + day.trucks.length) % day.trucks.length;
+  const newTruck = day.trucks[newIndex];
+  openTruckDetail(newTruck.id);
+}
+
+function goToNextTruck() {
+  const day = getCurrentDay();
+  if (!day || day.trucks.length === 0 || state.selectedTruckId == null) return;
+
+  const idx = getTruckIndex(state.selectedTruckId);
+  if (idx === -1) return;
+
+  const newIndex = (idx + 1) % day.trucks.length;
+  const newTruck = day.trucks[newIndex];
+  openTruckDetail(newTruck.id);
+}
+
+function deleteCurrentTruck() {
+  const day = getCurrentDay();
+  if (!day || state.selectedTruckId == null) return;
+
+  if (day.trucks.length <= 1) {
+    alert('Je moet minimaal één vrachtwagen per dag hebben.');
+    return;
+  }
+
+  const confirmed = window.confirm('Weet je zeker dat je deze vrachtwagen wilt verwijderen?');
+  if (!confirmed) return;
+
+  const idx = getTruckIndex(state.selectedTruckId);
+  if (idx === -1) return;
+
+  day.trucks.splice(idx, 1); // verwijder truck
+
+  if (day.trucks.length === 0) {
+    // zou eigenlijk nooit gebeuren door check hierboven
+    state.selectedTruckId = null;
+    showListView();
+    renderTruckList();
+  } else {
+    const newIndex = Math.min(idx, day.trucks.length - 1);
+    const newTruck = day.trucks[newIndex];
+    openTruckDetail(newTruck.id);
+    renderTruckList(); // lijst ook updaten voor als je teruggaat
+  }
 }
 
 // EVENT LISTENERS
@@ -285,11 +376,17 @@ backToListBtn.addEventListener('click', () => {
   showListView();
 });
 
+prevTruckBtn.addEventListener('click', goToPrevTruck);
+nextTruckBtn.addEventListener('click', goToNextTruck);
+deleteTruckBtn.addEventListener('click', deleteCurrentTruck);
+
 // VIEW HELPERS
 
 function showListView() {
   truckDetailView.classList.remove('active-view');
   truckListView.classList.add('active-view');
+  dayHeaderEl.classList.remove('hidden');     // dag-navigatie tonen
+  truckHeaderEl.classList.add('hidden');      // truck-navigatie verbergen
 }
 
 // INIT

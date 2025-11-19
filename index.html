@@ -8,18 +8,26 @@
 <body>
   <div id="app">
 
-    <!-- DAG-BALK -->
-    <header class="top-bar">
+    <!-- HEADER VOOR DAG-NAVIGATIE (alleen in lijst-view zichtbaar) -->
+    <header id="day-header" class="top-bar">
       <button id="prev-day-btn" class="nav-btn">&larr;</button>
       <div id="day-label" class="day-label">Vandaag</div>
       <button id="next-day-btn" class="nav-btn">&rarr;</button>
+    </header>
+
+    <!-- HEADER VOOR TRUCK-NAVIGATIE (alleen in detail-view zichtbaar) -->
+    <header id="truck-header" class="top-bar detail-top-bar hidden">
+      <button id="prev-truck-btn" class="nav-btn">&larr;</button>
+      <div id="truck-header-label" class="day-label">Truck 1</div>
+      <button id="next-truck-btn" class="nav-btn">&rarr;</button>
+      <button id="delete-truck-btn" class="danger-btn">Verwijder</button>
     </header>
 
     <!-- VIEW 1: Vrachtwagens lijst -->
     <main id="truck-list-view" class="view active-view">
       <div class="truck-list-container">
         <div id="truck-list" class="truck-list">
-          <!-- trucks komen hier via JS -->
+          <!-- trucks via JS -->
         </div>
 
         <button id="add-truck-btn" class="add-truck-btn">+</button>
@@ -30,16 +38,18 @@
     <main id="truck-detail-view" class="view">
       <header class="detail-header">
         <button id="back-to-list-btn" class="nav-btn">&larr; Terug</button>
-        <div class="detail-title">
-          Vrachtwagen <span id="detail-truck-name">1</span>
-        </div>
       </header>
 
       <section class="detail-content">
-        <!-- Slots links -->
+        <!-- Truck + slots links -->
         <div class="slots-container">
-          <div id="slots-grid" class="slots-grid">
-            <!-- 33 slots via JS -->
+          <div class="truck-visual">
+            <div class="detail-truck-roof"></div>
+            <div class="truck-label-front">Voorkant</div>
+            <div id="slots-grid" class="slots-grid">
+              <!-- 33 slots via JS -->
+            </div>
+            <div class="truck-label-back">Achterkant</div>
           </div>
         </div>
 
