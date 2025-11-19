@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Truck Planner Demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- DAG-BALK -->
+    <header class="top-bar">
+      <button id="prev-day-btn" class="nav-btn">&larr;</button>
+      <div id="day-label" class="day-label">Vandaag</div>
+      <button id="next-day-btn" class="nav-btn">&rarr;</button>
+    </header>
+
+    <!-- VIEW 1: Vrachtwagens lijst -->
+    <main id="truck-list-view" class="view active-view">
+      <div class="truck-list-container">
+        <div id="truck-list" class="truck-list">
+          <!-- trucks komen hier via JS -->
+        </div>
+
+        <button id="add-truck-btn" class="add-truck-btn">+</button>
+      </div>
+    </main>
+
+    <!-- VIEW 2: Vrachtwagen detail -->
+    <main id="truck-detail-view" class="view">
+      <header class="detail-header">
+        <button id="back-to-list-btn" class="nav-btn">&larr; Terug</button>
+        <div class="detail-title">
+          Vrachtwagen <span id="detail-truck-name">1</span>
+        </div>
+      </header>
+
+      <section class="detail-content">
+        <!-- Slots links -->
+        <div class="slots-container">
+          <div id="slots-grid" class="slots-grid">
+            <!-- 33 slots via JS -->
+          </div>
+        </div>
+
+        <!-- Orders rechts -->
+        <aside class="orders-panel">
+          <h3>Beschikbare orders</h3>
+          <p class="orders-hint">
+            Klik een order en daarna een leeg vak.<br>
+            Klik op een gevuld vak om de order terug te zetten.
+          </p>
+          <ul id="orders-list" class="orders-list">
+            <!-- orders via JS -->
+          </ul>
+        </aside>
+      </section>
+    </main>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
