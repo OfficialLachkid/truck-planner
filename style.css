@@ -5,7 +5,12 @@
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-/* Donkere achtergrond buiten de app */
+/* Variabelen voor responsieve groottes */
+:root {
+  --app-max-width: 520px;
+  --slot-size: clamp(22px, 4.2vw, 32px);
+}
+
 body {
   background: #0b0c10;
   display: flex;
@@ -19,8 +24,7 @@ body {
   background: #ffffff;
   border: 6px solid #222;
   border-radius: 16px;
-  width: 420px;
-  max-width: 100%;
+  width: min(var(--app-max-width), 100%);
   min-height: 720px;
   position: relative;
   padding: 16px;
@@ -34,6 +38,7 @@ body {
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
 .detail-top-bar {
@@ -51,6 +56,7 @@ body {
   border-radius: 999px;
   font-size: 16px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .nav-btn:hover {
@@ -61,7 +67,7 @@ body {
   font-size: 18px;
   font-weight: 600;
   text-align: center;
-  flex: 1;
+  flex: 1 1 auto;
 }
 
 .danger-btn {
@@ -72,6 +78,7 @@ body {
   border-radius: 999px;
   font-size: 13px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .danger-btn:hover {
@@ -95,6 +102,7 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   padding-top: 10px;
+  gap: 12px;
 }
 
 .truck-list {
@@ -102,7 +110,7 @@ body {
   flex-direction: row;
   gap: 10px;
   flex-wrap: wrap;
-  max-width: 260px;
+  max-width: 280px;
 }
 
 /* Truck kaart in lijst */
@@ -147,6 +155,7 @@ body {
   color: white;
   cursor: pointer;
   margin-top: 40px;
+  flex-shrink: 0;
 }
 
 .add-truck-btn:hover {
@@ -168,6 +177,12 @@ body {
   gap: 12px;
 }
 
+@media (max-width: 600px) {
+  .detail-content {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Truck visual + slots */
 
 .slots-container {
@@ -184,8 +199,8 @@ body {
 }
 
 .detail-truck-roof {
-  width: 80px;
-  height: 40px;
+  width: clamp(70px, 40%, 110px);
+  height: clamp(36px, 7vw, 48px);
   border-radius: 10px 10px 4px 4px;
   background: #f6b21a;
   box-shadow: 0 3px 4px rgba(0,0,0,0.18);
@@ -197,19 +212,20 @@ body {
   color: #555;
 }
 
+/* Grid: 3 kolommen x 11 rijen = 33 slots */
 .slots-grid {
-  width: 120px;
+  width: clamp(120px, 45vw, 160px);
   background: #e4e7ea;
   border-radius: 6px;
   padding: 8px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* 3 kolommen x 11 rijen = 33 */
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
 }
 
 .slot {
-  width: 30px;
-  height: 30px;
+  width: var(--slot-size);
+  height: var(--slot-size);
   border-radius: 4px;
   background: #c7d0da;
   cursor: pointer;
@@ -218,6 +234,7 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 11px;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 
 .slot.empty {
@@ -229,8 +246,14 @@ body {
   color: white;
 }
 
-.slot.selected-target {
-  outline: 2px dashed #333;
+.slot.rect {
+  /* Rechthoek: zelfde breedte, meer hoogte */
+  height: calc(var(--slot-size) * 1.6);
+}
+
+.slot:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 
 /* Orders */

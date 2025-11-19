@@ -1,5 +1,6 @@
 // Aantal vakken per vrachtwagen
 const NUM_SLOTS = 33;
+const SLOTS_PER_ROW = 3;
 
 // Globale state (nu nog volledig in memory)
 const state = {
@@ -87,8 +88,12 @@ function createInitialTrucks() {
 
 function createTruck(name) {
   const truckId = nextTruckId++;
-  // lege slots (null = leeg, anders: orderId)
-  const slots = Array(NUM_SLOTS).fill(null);
+
+  // slots: elk slot heeft een orderId en een shape (square/rect)
+  const slots = Array.from({ length: NUM_SLOTS }, () => ({
+    orderId: null,
+    shape: 'square'
+  }));
 
   // dummy orders voor deze truck
   const orders = [
@@ -120,6 +125,17 @@ function getTruckById(truckId) {
 function getTruckIndex(truckId) {
   const day = getCurrentDay();
   return day.trucks.findIndex(t => t.id === truckId);
+}
+
+// Helper voor rijen
+
+function getRowIndex(slotIndex) {
+  return Math.floor(slotIndex / SLOTS_PER_ROW);
+}
+
+function getRowSlotIndices(rowIndex) {
+  const base = rowIndex * SLOTS_PER_ROW;
+  return [base, base + 1, base + 2].filter(i => i < NUM_SLOTS);
 }
 
 // RENDERING
@@ -191,7 +207,9 @@ function openTruckDetail(truckId) {
 function renderSlots(truck) {
   slotsGridEl.innerHTML = '';
 
-  truck.slots.forEach((orderId, index) => {
+  truck.slots.forEach((slotObj, index) => {
+    const { orderId, shape } = slotObj;
+
     const slotEl = document.createElement('div');
     slotEl.classList.add('slot');
     slotEl.dataset.index = index;
@@ -204,8 +222,12 @@ function renderSlots(truck) {
       slotEl.textContent = order ? order.label.replace('Order ', '') : '?';
     }
 
-    slotEl.addEventListener('click', () => {
-      handleSlotClick(truck, index);
+    if (shape === 'rect') {
+      slotEl.classList.add('rect');
+    }
+
+    slotEl.addEventListener('click', (e) => {
+      handleSlotClick(truck, index, e);
     });
 
     slotsGridEl.appendChild(slotEl);
@@ -261,29 +283,111 @@ function handleOrderClick(orderId) {
   renderSlots(truck);
 }
 
-function handleSlotClick(truck, slotIndex) {
-  const currentOrderId = truck.slots[slotIndex];
+/**
+ * Controle: mag er in deze rij nog een order bij?
+ * Regel:
+ *  - als er een rechthoekige slot in de rij is, dan max 2 bezette slots in die rij.
+ */
+function canPlaceOrderInRow(truck, targetSlotIndex) {
+  const rowIndex = getRowIndex(targetSlotIndex);
+  const rowIndices = getRowSlotIndices(rowIndex);
+  const rowSlots = rowIndices.map(i => truck.slots[i]);
 
-  // CASE 1: Slot is gevuld en er is geen order geselecteerd -> order terug naar lijst
+  const hasRect = rowSlots.some(s => s && s.shape === 'rect');
+  const occupiedCount = rowSlots.filter(s => s && s.orderId !== null).length;
+
+  if (hasRect && occupiedCount >= 2) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Slot vorm aanpassen: vierkant of rechthoek
+ */
+function setSlotShape(truck, slotIndex, newShape) {
+  const slot = truck.slots[slotIndex];
+  if (!slot) return;
+
+  if (slot.shape === newShape) return; // niks te doen
+
+  // Als we naar rechthoek gaan, controleren of dit mag qua capaciteit
+  if (newShape === 'rect') {
+    const rowIndex = getRowIndex(slotIndex);
+    const rowIndices = getRowSlotIndices(rowIndex);
+    const rowSlots = rowIndices.map(i => truck.slots[i]);
+    const occupiedCount = rowSlots.filter(s => s && s.orderId !== null).length;
+
+    if (occupiedCount >= 3) {
+      alert(
+        'In deze rij staan al 3 pallets. ' +
+        'Je kunt deze positie niet rechthoekig maken zonder eerst een slot leeg te maken.'
+      );
+      return;
+    }
+  }
+
+  slot.shape = newShape;
+}
+
+/**
+ * Klik op een slot:
+ * - Als slot gevuld & geen order-selected -> order terug naar lijst
+ * - Als slot leeg & er is een geselecteerde order -> probeer order te plaatsen
+ * - Als slot leeg & géén geselecteerde order -> vorm (vierkant/rechthoek) kiezen
+ */
+function handleSlotClick(truck, slotIndex, event) {
+  const slot = truck.slots[slotIndex];
+  const currentOrderId = slot.orderId;
+
+  // CASE A: Leeg slot, geen geselecteerde order -> vorm kiezen
+  if (currentOrderId === null && state.selectedOrderId === null) {
+    const makeRect = window.confirm(
+      'Wil je deze slot rechthoekig maken?\n\n' +
+      'OK = Rechthoek\nAnnuleer = Vierkant'
+    );
+    const newShape = makeRect ? 'rect' : 'square';
+    setSlotShape(truck, slotIndex, newShape);
+    renderSlots(truck);
+    return;
+  }
+
+  // CASE B: Slot is gevuld en er is geen order geselecteerd -> order terug naar lijst
   if (currentOrderId !== null && state.selectedOrderId === null) {
     const order = truck.orders.find(o => o.id === currentOrderId);
     if (order) {
       order.assignedSlotIndex = null;
     }
-    truck.slots[slotIndex] = null;
+    slot.orderId = null;
+
+    renderSlots(truck);
+    renderOrders(truck);
+    return;
   }
-  // CASE 2: Slot is leeg en er is een order geselecteerd -> plaats de order
-  else if (currentOrderId === null && state.selectedOrderId !== null) {
+
+  // CASE C: Slot is leeg en er is een order geselecteerd -> plaats de order (mits toegestaan)
+  if (currentOrderId === null && state.selectedOrderId !== null) {
+    if (!canPlaceOrderInRow(truck, slotIndex)) {
+      alert(
+        'In deze rij is al een rechthoekige slot en er staan al 2 pallets.\n' +
+        'Er past geen derde pallet meer in deze rij.'
+      );
+      return;
+    }
+
     const order = truck.orders.find(o => o.id === state.selectedOrderId);
     if (order) {
       order.assignedSlotIndex = slotIndex;
-      truck.slots[slotIndex] = order.id;
+      slot.orderId = order.id;
       state.selectedOrderId = null;
     }
+
+    renderSlots(truck);
+    renderOrders(truck);
+    return;
   }
 
-  renderSlots(truck);
-  renderOrders(truck);
+  // CASE D: Slot is gevuld én er is ook een order geselecteerd -> hier kun je later swap-logica maken
 }
 
 // TRUCK-NAVIGATIE IN DETAIL-VIEW
@@ -330,7 +434,6 @@ function deleteCurrentTruck() {
   day.trucks.splice(idx, 1); // verwijder truck
 
   if (day.trucks.length === 0) {
-    // zou eigenlijk nooit gebeuren door check hierboven
     state.selectedTruckId = null;
     showListView();
     renderTruckList();
