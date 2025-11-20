@@ -451,7 +451,10 @@ function distanceKm(a, b) {
  */
 function buildRouteStops(truck) {
   const loaded = truck.orders.filter(
-    o => o.assignedSlotIndex !== null && typeof o.lat === 'number' && typeof o.lng === 'number'
+    o =>
+      o.assignedSlotIndex !== null &&
+      typeof o.lat === 'number' &&
+      typeof o.lng === 'number'
   );
 
   const remaining = loaded.map(o => ({
@@ -491,19 +494,25 @@ function showMap() {
   mapOverlay.classList.remove('hidden');
   mapOverlay.style.display = 'flex';
 
+  // Kaart initialiseren (één keer)
   if (!nlMap && typeof L !== 'undefined') {
     nlMap = L.map('nl-map').setView([52.1, 5.3], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap-bijdragers'
     }).addTo(nlMap);
-    routeLayer = L.layerGroup().addTo(nlMap);
-  } else if (nlMap) {
-    setTimeout(() => nlMap.invalidateSize(), 100);
   }
 
-  if (!nlMap || !routeLayer) return;
+  if (!nlMap || typeof L === 'undefined') return;
 
-  routeLayer.clearLayers();
+  // Zorg dat routeLayer altijd bestaat
+  if (!routeLayer) {
+    routeLayer = L.layerGroup().addTo(nlMap);
+  } else {
+    routeLayer.clearLayers();
+  }
+
+  // Kaart goed laten renderen in overlay
+  setTimeout(() => nlMap.invalidateSize(), 80);
 
   const truck = getTruckById(state.selectedTruckId);
   if (!truck) {
@@ -515,22 +524,20 @@ function showMap() {
 
   // Startpunt marker
   const points = [];
-  const startMarker = L.marker([START_LOCATION.lat, START_LOCATION.lng]).bindPopup(
-    START_LOCATION.label
-  );
+  const startLatLng = [START_LOCATION.lat, START_LOCATION.lng];
+  const startMarker = L.marker(startLatLng).bindPopup(START_LOCATION.label);
   routeLayer.addLayer(startMarker);
-  points.push([START_LOCATION.lat, START_LOCATION.lng]);
+  points.push(startLatLng);
 
-  // Markers voor elke order in routevolgorde
+  // Markers voor iedere stop in routevolgorde
   routeStops.forEach(stop => {
-    const marker = L.marker([stop.lat, stop.lng]).bindPopup(
-      `${stop.label} – ${stop.location}`
-    );
+    const latLng = [stop.lat, stop.lng];
+    const marker = L.marker(latLng).bindPopup(`${stop.label} – ${stop.location}`);
     routeLayer.addLayer(marker);
-    points.push([stop.lat, stop.lng]);
+    points.push(latLng);
   });
 
-  // Polyline tekenen als er minstens één stop is
+  // Polyline tekenen als er minstens één stop is (dus 2 punten incl. start)
   if (points.length > 1) {
     const poly = L.polyline(points, {
       color: '#2b6cb0',
@@ -540,6 +547,7 @@ function showMap() {
     routeLayer.addLayer(poly);
     nlMap.fitBounds(poly.getBounds(), { padding: [30, 30] });
   } else {
+    // Alleen startpunt → zoom op Nederland
     nlMap.setView([52.1, 5.3], 7);
   }
 }
