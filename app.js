@@ -2,7 +2,7 @@
 const NUM_SLOTS = 33;
 const SLOTS_PER_ROW = 3;
 
-// Globale state (nu nog volledig in memory)
+// Globale state
 const state = {
   currentDayIndex: 0,          // 0 = vandaag, +1 = morgen, -1 = gisteren
   days: {},                    // key: dag-string -> { trucks: [...] }
@@ -29,6 +29,8 @@ const nextTruckBtn = document.getElementById('next-truck-btn');
 const deleteTruckBtn = document.getElementById('delete-truck-btn');
 
 const backToListBtn = document.getElementById('back-to-list-btn');
+const openMapBtn = document.getElementById('open-map-btn');
+
 const slotsGridEl = document.getElementById('slots-grid');
 const ordersListEl = document.getElementById('orders-list');
 
@@ -38,7 +40,12 @@ const orderDetailMetaEl = document.getElementById('order-detail-meta');
 const orderDetailBodyEl = document.getElementById('order-detail-body');
 const orderDetailCloseBtn = document.getElementById('order-detail-close');
 
-// Helpers voor datum
+// Kaart overlay
+const mapOverlay = document.getElementById('map-overlay');
+const mapCloseBtn = document.getElementById('map-close-btn');
+let nlMap = null;
+
+// Helpers datum
 
 function createDateByIndex(dayIndex) {
   const d = new Date();
@@ -56,7 +63,7 @@ function formatDate(d) {
 
 function getDayKey(dayIndex) {
   const d = createDateByIndex(dayIndex);
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  return d.toISOString().slice(0, 10);
 }
 
 function getDayLabel(dayIndex) {
@@ -69,12 +76,11 @@ function getDayLabel(dayIndex) {
   return base;
 }
 
-// Dag initialiseren als hij nog niet bestaat
+// Dag initialiseren
 
 function ensureDayExists(dayIndex) {
   const key = getDayKey(dayIndex);
   if (!state.days[key]) {
-    // Nieuwe dag met 1 truck en wat dummy orders
     state.days[key] = {
       trucks: createInitialTrucks()
     };
@@ -87,19 +93,16 @@ let nextOrderId = 1;
 
 function createInitialTrucks() {
   const trucks = [];
-  // standaard 1 truck
   trucks.push(createTruck('Truck 1'));
   return trucks;
 }
 
-/**
- * Dummy order detail-gegevens genereren
- */
+// Dummy order-details
 function createDummyOrderDetails(orderId, label, info) {
   const today = formatDate(new Date());
   const postcode = `10${(orderId % 90 + 10).toString().padStart(2, '0')}AB`;
   const location = ['Amsterdam', 'Rotterdam', 'Utrecht', 'Eindhoven'][orderId % 4];
-  const totalPallets = (orderId % 3) + 1; // 1-3 pallets
+  const totalPallets = (orderId % 3) + 1;
 
   const lines = [
     {
@@ -134,13 +137,11 @@ function createDummyOrderDetails(orderId, label, info) {
 function createTruck(name) {
   const truckId = nextTruckId++;
 
-  // slots: elk slot heeft een orderId en een shape (square/rect)
   const slots = Array.from({ length: NUM_SLOTS }, () => ({
     orderId: null,
     shape: 'square'
   }));
 
-  // basis dummy orders voor deze truck
   const baseOrders = [
     { label: 'Order A', info: 'Klant X' },
     { label: 'Order B', info: 'Klant Y' },
@@ -194,7 +195,7 @@ function getTruckIndex(truckId) {
   return day.trucks.findIndex(t => t.id === truckId);
 }
 
-// Helper voor rijen
+// Helpers rijen
 
 function getRowIndex(slotIndex) {
   return Math.floor(slotIndex / SLOTS_PER_ROW);
@@ -205,7 +206,7 @@ function getRowSlotIndices(rowIndex) {
   return [base, base + 1, base + 2].filter(i => i < NUM_SLOTS);
 }
 
-// RENDERING
+// Rendering
 
 function renderDayHeader() {
   dayLabelEl.textContent = getDayLabel(state.currentDayIndex);
@@ -215,7 +216,6 @@ function renderTruckList() {
   const day = ensureDayExists(state.currentDayIndex);
   renderDayHeader();
 
-  // Verwijder alleen bestaande truck-cards, laat de + knop staan
   truckListEl.querySelectorAll('.truck-card').forEach(el => el.remove());
 
   day.trucks.forEach((truck, index) => {
@@ -223,7 +223,6 @@ function renderTruckList() {
     card.className = 'truck-card';
     card.dataset.truckId = truck.id;
 
-    // check of truck vol is (alle slots bezet)
     const isFull = truck.slots.every(slot => slot.orderId !== null);
     if (isFull) {
       card.classList.add('truck-full');
@@ -234,7 +233,7 @@ function renderTruckList() {
 
     const body = document.createElement('div');
     body.className = 'truck-body';
-    body.textContent = index + 1; // nummer zoals in jouw design
+    body.textContent = index + 1;
 
     card.appendChild(roof);
     card.appendChild(body);
@@ -243,12 +242,11 @@ function renderTruckList() {
       openTruckDetail(truck.id);
     });
 
-    // Voeg elke truck VOOR de plus-knop toe
     truckListEl.insertBefore(card, addTruckBtn);
   });
 }
 
-// Truck detail scherm
+// Truck-detail header
 
 function updateTruckHeader() {
   const day = getCurrentDay();
@@ -258,14 +256,35 @@ function updateTruckHeader() {
   if (idx === -1) return;
 
   const dLabel = getDayLabel(state.currentDayIndex);
-  // Alleen "Truck X - datum"
   truckHeaderLabelEl.textContent = `Truck ${idx + 1} - ${dLabel}`;
+}
+
+// Views schakelen
+
+function showListView() {
+  hideOrderDetail();
+  hideMap();
+
+  truckListView.classList.add('active-view');
+  truckDetailView.classList.remove('active-view');
+
+  dayHeaderEl.classList.remove('hidden');
+  truckHeaderEl.classList.add('hidden');
+}
+
+function showDetailView() {
+  truckListView.classList.remove('active-view');
+  truckDetailView.classList.add('active-view');
+
+  dayHeaderEl.classList.add('hidden');
+  truckHeaderEl.classList.remove('hidden');
 }
 
 function openTruckDetail(truckId) {
   state.selectedTruckId = truckId;
   state.selectedOrderId = null;
-  hideOrderDetail(); // zorg dat overlay altijd uit is
+  hideOrderDetail();
+  hideMap();
 
   const truck = getTruckById(truckId);
   if (!truck) return;
@@ -273,13 +292,10 @@ function openTruckDetail(truckId) {
   renderSlots(truck);
   renderOrders(truck);
   updateTruckHeader();
-
-  // switch view + headers
-  truckListView.classList.remove('active-view');
-  truckDetailView.classList.add('active-view');
-  dayHeaderEl.classList.add('hidden');       // dag-navigatie verbergen
-  truckHeaderEl.classList.remove('hidden');  // truck-navigatie tonen
+  showDetailView();
 }
+
+// Slots / orders renderen
 
 function renderSlots(truck) {
   slotsGridEl.innerHTML = '';
@@ -300,7 +316,6 @@ function renderSlots(truck) {
     const rowHasRect = (left && left.shape === 'rect') ||
                        (right && right.shape === 'rect');
 
-    // Helper om één slot element te maken
     const createSlotEl = (slotObj, idx) => {
       const slotEl = document.createElement('div');
       slotEl.classList.add('slot', slotObj.shape === 'rect' ? 'rect' : 'square');
@@ -314,25 +329,16 @@ function renderSlots(truck) {
         slotEl.textContent = order ? order.label.replace('Order ', '') : '?';
       }
 
-      slotEl.addEventListener('click', (e) => {
-        handleSlotClick(truck, idx, e);
+      slotEl.addEventListener('click', () => {
+        handleSlotClick(truck, idx);
       });
 
       return slotEl;
     };
 
-    // Volgorde: links, midden (alleen als geen rect in rij), rechts
-    if (left) {
-      rowDiv.appendChild(createSlotEl(left, leftIdx));
-    }
-
-    if (!rowHasRect && mid) {
-      rowDiv.appendChild(createSlotEl(mid, midIdx));
-    }
-
-    if (right) {
-      rowDiv.appendChild(createSlotEl(right, rightIdx));
-    }
+    if (left) rowDiv.appendChild(createSlotEl(left, leftIdx));
+    if (!rowHasRect && mid) rowDiv.appendChild(createSlotEl(mid, midIdx));
+    if (right) rowDiv.appendChild(createSlotEl(right, rightIdx));
 
     slotsGridEl.appendChild(rowDiv);
   }
@@ -371,7 +377,7 @@ function renderOrders(truck) {
   });
 }
 
-// Order detail overlay logica
+// Order detail overlay
 
 function showOrderDetail(order) {
   orderDetailMetaEl.innerHTML = `
@@ -384,24 +390,14 @@ function showOrderDetail(order) {
   `;
 
   orderDetailBodyEl.innerHTML = '';
-
   order.lines.forEach(line => {
     const tr = document.createElement('tr');
-
-    const tdArticle = document.createElement('td');
-    tdArticle.textContent = line.article;
-    const tdDesc = document.createElement('td');
-    tdDesc.textContent = line.description;
-    const tdBoxes = document.createElement('td');
-    tdBoxes.textContent = line.boxes;
-    const tdPallets = document.createElement('td');
-    tdPallets.textContent = line.pallets;
-
-    tr.appendChild(tdArticle);
-    tr.appendChild(tdDesc);
-    tr.appendChild(tdBoxes);
-    tr.appendChild(tdPallets);
-
+    tr.innerHTML = `
+      <td>${line.article}</td>
+      <td>${line.description}</td>
+      <td>${line.boxes}</td>
+      <td>${line.pallets}</td>
+    `;
     orderDetailBodyEl.appendChild(tr);
   });
 
@@ -416,7 +412,28 @@ function hideOrderDetail() {
   orderDetailBodyEl.innerHTML = '';
 }
 
-// INTERACTIE
+// Kaart overlay
+
+function showMap() {
+  mapOverlay.classList.remove('hidden');
+  mapOverlay.style.display = 'flex';
+
+  if (!nlMap && typeof L !== 'undefined') {
+    nlMap = L.map('nl-map').setView([52.1, 5.3], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap-bijdragers'
+    }).addTo(nlMap);
+  } else if (nlMap) {
+    setTimeout(() => nlMap.invalidateSize(), 100);
+  }
+}
+
+function hideMap() {
+  mapOverlay.classList.add('hidden');
+  mapOverlay.style.display = 'none';
+}
+
+// Interactie
 
 function handleOrderClick(orderId) {
   const truck = getTruckById(state.selectedTruckId);
@@ -427,29 +444,22 @@ function handleOrderClick(orderId) {
 
   const isFree = clickedOrder.assignedSlotIndex === null;
 
-  // Tweede klik op dezelfde order:
+  // Tweede klik op dezelfde vrije order -> details
   if (state.selectedOrderId === orderId) {
-    // Alleen detail tonen als de order nog géén slot heeft
     if (isFree) {
       showOrderDetail(clickedOrder);
     }
     return;
   }
 
-  // Nieuwe order selecteren (eerste klik op deze order)
+  // Eerste klik -> selecteren
   state.selectedOrderId = orderId;
-  hideOrderDetail(); // voor de zekerheid sluiten als we van order wisselen
+  hideOrderDetail();
 
   renderOrders(truck);
   renderSlots(truck);
 }
 
-/**
- * Controle: mag er in deze rij nog een order bij?
- * Regel:
- *  - als er een rechthoekige slot in de rij is, dan max 2 bezette slots in die rij.
- *  - zonder rechthoek kan je 3 vierkanten hebben.
- */
 function canPlaceOrderInRow(truck, targetSlotIndex) {
   const rowIndex = getRowIndex(targetSlotIndex);
   const rowIndices = getRowSlotIndices(rowIndex);
@@ -458,43 +468,30 @@ function canPlaceOrderInRow(truck, targetSlotIndex) {
   const hasRect = rowSlots.some(s => s && s.shape === 'rect');
   const occupiedCount = rowSlots.filter(s => s && s.orderId !== null).length;
 
-  if (hasRect && occupiedCount >= 2) {
-    return false;
-  }
+  if (hasRect && occupiedCount >= 2) return false;
   return true;
 }
 
-/**
- * Slot vorm aanpassen: vierkant of rechthoek
- * - Rechthoek mag alleen op linker of rechter positie in de rij.
- * - Als hij rechthoek wordt, wordt het middelste slot van de rij leeggemaakt
- *   (order gaat terug naar de lijst) en verdwijnt visueel.
- */
 function setSlotShape(truck, slotIndex, newShape) {
   const slot = truck.slots[slotIndex];
-  if (!slot) return;
-  if (slot.shape === newShape) return; // niks te doen
+  if (!slot || slot.shape === newShape) return;
 
   const rowIndex = getRowIndex(slotIndex);
   const rowIndices = getRowSlotIndices(rowIndex);
   const posInRow = rowIndices.indexOf(slotIndex);
-  const midIdx = rowIndices[1]; // kan undefined zijn op de laatste rij
+  const midIdx = rowIndices[1];
 
   if (newShape === 'rect') {
-    // alleen links (pos 0) of rechts (pos 2)
     if (posInRow === 1) {
       alert('Een rechthoek kan alleen op de linker- of rechterpositie in een rij worden gezet.');
       return;
     }
 
-    // middelste slot leeghalen als daar een order in staat
     if (midIdx !== undefined) {
       const midSlot = truck.slots[midIdx];
       if (midSlot && midSlot.orderId !== null) {
         const order = truck.orders.find(o => o.id === midSlot.orderId);
-        if (order) {
-          order.assignedSlotIndex = null;
-        }
+        if (order) order.assignedSlotIndex = null;
         midSlot.orderId = null;
       }
     }
@@ -503,17 +500,11 @@ function setSlotShape(truck, slotIndex, newShape) {
   slot.shape = newShape;
 }
 
-/**
- * Klik op een slot:
- * - Als slot gevuld & geen order-selected -> order terug naar lijst
- * - Als slot leeg & er is een geselecteerde order -> plaats de order (mits toegestaan)
- * - Als slot leeg & géén geselecteerde order -> vorm (vierkant/rechthoek) kiezen
- */
-function handleSlotClick(truck, slotIndex, event) {
+function handleSlotClick(truck, slotIndex) {
   const slot = truck.slots[slotIndex];
   const currentOrderId = slot.orderId;
 
-  // CASE A: Leeg slot, geen geselecteerde order -> vorm kiezen
+  // Leeg slot, geen order geselecteerd -> vorm kiezen
   if (currentOrderId === null && state.selectedOrderId === null) {
     const makeRect = window.confirm(
       'Wil je deze slot rechthoekig maken?\n\n' +
@@ -525,12 +516,10 @@ function handleSlotClick(truck, slotIndex, event) {
     return;
   }
 
-  // CASE B: Slot is gevuld en er is geen order geselecteerd -> order terug naar lijst
+  // Gevuld slot, geen order geselecteerd -> order terug
   if (currentOrderId !== null && state.selectedOrderId === null) {
     const order = truck.orders.find(o => o.id === currentOrderId);
-    if (order) {
-      order.assignedSlotIndex = null;
-    }
+    if (order) order.assignedSlotIndex = null;
     slot.orderId = null;
 
     renderSlots(truck);
@@ -538,7 +527,7 @@ function handleSlotClick(truck, slotIndex, event) {
     return;
   }
 
-  // CASE C: Slot is leeg en er is een order geselecteerd -> plaats de order (mits toegestaan)
+  // Leeg slot, wel order geselecteerd -> proberen te plaatsen
   if (currentOrderId === null && state.selectedOrderId !== null) {
     if (!canPlaceOrderInRow(truck, slotIndex)) {
       alert(
@@ -560,10 +549,10 @@ function handleSlotClick(truck, slotIndex, event) {
     return;
   }
 
-  // CASE D: Slot is gevuld én er is ook een order geselecteerd -> hier kun je later swap-logica maken
+  // Gevuld slot én er is een andere order geselecteerd -> laten we nu nog niks doen
 }
 
-// TRUCK-NAVIGATIE IN DETAIL-VIEW
+// Truck-navigatie
 
 function goToPrevTruck() {
   const day = getCurrentDay();
@@ -604,7 +593,7 @@ function deleteCurrentTruck() {
   const idx = getTruckIndex(state.selectedTruckId);
   if (idx === -1) return;
 
-  day.trucks.splice(idx, 1); // verwijder truck
+  day.trucks.splice(idx, 1);
 
   if (day.trucks.length === 0) {
     state.selectedTruckId = null;
@@ -614,17 +603,16 @@ function deleteCurrentTruck() {
     const newIndex = Math.min(idx, day.trucks.length - 1);
     const newTruck = day.trucks[newIndex];
     openTruckDetail(newTruck.id);
-    renderTruckList(); // lijst ook updaten voor als je teruggaat
+    renderTruckList();
   }
 }
 
-// EVENT LISTENERS
+// Event listeners
 
 prevDayBtn.addEventListener('click', () => {
   state.currentDayIndex -= 1;
   state.selectedTruckId = null;
   state.selectedOrderId = null;
-  hideOrderDetail();
   ensureDayExists(state.currentDayIndex);
   showListView();
   renderTruckList();
@@ -634,7 +622,6 @@ nextDayBtn.addEventListener('click', () => {
   state.currentDayIndex += 1;
   state.selectedTruckId = null;
   state.selectedOrderId = null;
-  hideOrderDetail();
   ensureDayExists(state.currentDayIndex);
   showListView();
   renderTruckList();
@@ -651,49 +638,39 @@ addTruckBtn.addEventListener('click', () => {
 backToListBtn.addEventListener('click', () => {
   state.selectedTruckId = null;
   state.selectedOrderId = null;
-  hideOrderDetail();
   showListView();
-  renderTruckList();   // overzicht bijwerken (zodat volle trucks rood worden)
+  renderTruckList();
 });
 
 prevTruckBtn.addEventListener('click', () => {
   hideOrderDetail();
+  hideMap();
   goToPrevTruck();
 });
 
 nextTruckBtn.addEventListener('click', () => {
   hideOrderDetail();
+  hideMap();
   goToNextTruck();
 });
 
 deleteTruckBtn.addEventListener('click', () => {
   hideOrderDetail();
+  hideMap();
   deleteCurrentTruck();
 });
 
-orderDetailCloseBtn.addEventListener('click', () => {
-  hideOrderDetail();
-  // selectie blijft, maar je kunt nu weer sloten vullen
-});
+orderDetailCloseBtn.addEventListener('click', hideOrderDetail);
 
-// VIEW HELPERS
+openMapBtn.addEventListener('click', showMap);
+mapCloseBtn.addEventListener('click', hideMap);
 
-function showListView() {
-  // altijd overlay weg als we terug naar lijst gaan
-  hideOrderDetail();
-
-  truckDetailView.classList.remove('active-view');
-  truckListView.classList.add('active-view');
-  dayHeaderEl.classList.remove('hidden');     // dag-navigatie tonen
-  truckHeaderEl.classList.add('hidden');      // truck-navigatie verbergen
-}
-
-// INIT
+// Init
 
 function init() {
   ensureDayExists(0);
-  hideOrderDetail(); // overlay meteen verbergen
   renderTruckList();
+  showListView();
 }
 
 init();

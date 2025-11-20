@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <title>Truck Planner Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <link rel="stylesheet" href="style.css">
+  <!-- Leaflet CSS voor kaart -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
 </head>
 <body>
   <div id="app">
@@ -23,7 +30,7 @@
       <button id="delete-truck-btn" class="danger-btn">Verwijder</button>
     </header>
 
-    <!-- VIEW 1: Vrachtwagens lijst -->
+    <!-- VIEW 1: Vrachtwagens lijst (agenda) -->
     <main id="truck-list-view" class="view active-view">
       <div class="truck-list-container">
         <div id="truck-list" class="truck-list">
@@ -33,41 +40,49 @@
       </div>
     </main>
 
-    <!-- VIEW 2: Vrachtwagen detail -->
+    <!-- VIEW 2: Vrachtwagen detail (slots + orders) -->
     <main id="truck-detail-view" class="view">
-      <header class="detail-header">
-        <button id="back-to-list-btn" class="nav-btn">&larr; Terug</button>
-      </header>
-
-      <section class="detail-content">
-        <!-- Truck + slots links -->
-        <div class="slots-container">
-          <div class="truck-visual">
-            <div class="detail-truck-roof"></div>
-            <div class="truck-label-front">Voorkant</div>
-            <div id="slots-grid" class="slots-grid">
-              <!-- 33 slots via JS -->
-            </div>
-            <div class="truck-label-back">Achterkant</div>
+      <div class="detail-page">
+        <header class="detail-header">
+          <div class="detail-header-left">
+            <button id="back-to-list-btn" class="nav-btn">&larr; Terug</button>
           </div>
-        </div>
+          <div class="detail-header-right">
+            <!-- Kaartknop staat alleen op dit scherm -->
+            <button id="open-map-btn" class="nav-btn map-btn">🗺️ Kaart</button>
+          </div>
+        </header>
 
-        <!-- Orders rechts -->
-        <aside class="orders-panel">
-          <h3>Beschikbare orders</h3>
-          <p class="orders-hint">
-            Klik een order en daarna een leeg vak.<br>
-            Klik op een gevuld vak om de order terug te zetten.<br>
-            Klik op een leeg vak zonder order om de vorm (vierkant/rechthoek) te kiezen.<br>
-            Klik twee keer op dezelfde vrije order om details (tabel) te bekijken.
-          </p>
-          <ul id="orders-list" class="orders-list">
-            <!-- orders via JS -->
-          </ul>
-        </aside>
-      </section>
+        <section class="detail-content">
+          <!-- Truck + slots links -->
+          <div class="slots-container">
+            <div class="truck-visual">
+              <div class="detail-truck-roof"></div>
+              <div class="truck-label-front">Voorkant</div>
+              <div id="slots-grid" class="slots-grid">
+                <!-- 33 slots via JS -->
+              </div>
+              <div class="truck-label-back">Achterkant</div>
+            </div>
+          </div>
 
-      <!-- ORDER DETAIL OVERLAY (alleen in detail-view) -->
+          <!-- Orders rechts -->
+          <aside class="orders-panel">
+            <h3>Beschikbare orders</h3>
+            <p class="orders-hint">
+              Klik een order en daarna een leeg vak.<br>
+              Klik op een gevuld vak om de order terug te zetten.<br>
+              Klik op een leeg vak zonder order om de vorm (vierkant/rechthoek) te kiezen.<br>
+              Klik twee keer op dezelfde vrije order om details (tabel) te bekijken.
+            </p>
+            <ul id="orders-list" class="orders-list">
+              <!-- orders via JS -->
+            </ul>
+          </aside>
+        </section>
+      </div>
+
+      <!-- ORDER DETAIL OVERLAY -->
       <div
         id="order-detail-overlay"
         class="order-detail-overlay hidden"
@@ -100,10 +115,27 @@
         </div>
       </div>
 
+      <!-- KAART-OVERLAY -->
+      <div
+        id="map-overlay"
+        class="map-overlay hidden"
+        style="display:none;"
+      >
+        <div class="map-card">
+          <h3>Kaart – Nederland</h3>
+          <div id="nl-map" class="map-container"></div>
+          <button id="map-close-btn" class="nav-btn order-detail-close-btn">
+            Sluit
+          </button>
+        </div>
+      </div>
+
     </main>
 
   </div>
 
+  <!-- Leaflet JS voor kaart -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
