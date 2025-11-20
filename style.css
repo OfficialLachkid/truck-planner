@@ -94,17 +94,14 @@ body {
 
 /* ==== CHEVRONS voor agenda/truck pijlen ==== */
 
-/* Deze knoppen krijgen chevron-iconen; we verbergen hun originele tekst
-   en tekenen een chevron via ::before */
 #prev-day-btn,
 #next-day-btn,
 #prev-truck-btn,
 #next-truck-btn {
   position: relative;
-  font-size: 0;         /* originele ← / → tekst verbergen */
+  font-size: 0;
 }
 
-/* Links: chevron naar links */
 #prev-day-btn::before,
 #prev-truck-btn::before {
   content: "‹";
@@ -114,7 +111,6 @@ body {
   text-shadow: 0 0 1px currentColor;
 }
 
-/* Rechts: chevron naar rechts */
 #next-day-btn::before,
 #next-truck-btn::before {
   content: "›";
@@ -124,17 +120,14 @@ body {
   text-shadow: 0 0 1px currentColor;
 }
 
-/* Terug-knop: pijl + tekst blijven zichtbaar, maar iets kleiner en zachter */
+/* Terug-knop tekst + pijl blijven gewoon */
 #back-to-list-btn {
   font-size: 18px;
 }
 
-/* Omdat we net font-size 18 hebben gezet, laten we de pijl mooi uitkomen */
 #back-to-list-btn::first-letter {
   font-weight: 900;
 }
-
-/* ========================================== */
 
 .day-label {
   font-size: 22px;
@@ -174,7 +167,7 @@ body {
 .view {
   display: none;
   flex: 1 1 auto;
-  overflow: hidden;  /* elke view beheert eigen scroll */
+  overflow: hidden;
 }
 
 .view.active-view {
@@ -294,7 +287,7 @@ body {
   grid-template-columns: 2fr 1.3fr;
   gap: 16px;
   flex: 1 1 auto;
-  overflow: hidden;  /* voorkomt dat het hele detail-scherm gaat schuiven */
+  overflow: hidden;
 }
 
 @media (max-width: 600px) {
@@ -309,7 +302,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: stretch;
-  overflow-y: auto;   /* alleen truck-kant scrollt als hij langer is */
+  overflow-y: auto;
 }
 
 .truck-visual {
@@ -396,7 +389,7 @@ body {
   border-radius: 8px;
   padding: 8px 10px;
   border: 1px solid #e0e4ea;
-  overflow-y: auto;   /* alleen deze kolom scrollt voor orders */
+  overflow-y: auto;
 }
 
 .orders-panel h3 {

@@ -2,10 +2,26 @@
 const NUM_SLOTS = 33;
 const SLOTS_PER_ROW = 3;
 
+// Startlocatie van de truck
+const START_LOCATION = {
+  lat: 52.5185,        // ongeveer Lelystad
+  lng: 5.4714,
+  label: 'Start: Lelystad – Wittevrouwen 1'
+};
+
+// Dummy coördinaten per stad (kan later echte geocoding worden)
+const CITY_COORDS = {
+  Amsterdam: { lat: 52.3728, lng: 4.8936 },
+  Rotterdam: { lat: 51.9225, lng: 4.4792 },
+  Utrecht:   { lat: 52.0907, lng: 5.1214 },
+  Eindhoven: { lat: 51.4416, lng: 5.4697 },
+  'Den Haag': { lat: 52.0705, lng: 4.3007 }
+};
+
 // Globale state
 const state = {
-  currentDayIndex: 0,          // 0 = vandaag, +1 = morgen, -1 = gisteren
-  days: {},                    // key: dag-string -> { trucks: [...] }
+  currentDayIndex: 0,
+  days: {},
   selectedTruckId: null,
   selectedOrderId: null
 };
@@ -44,6 +60,7 @@ const orderDetailCloseBtn = document.getElementById('order-detail-close');
 const mapOverlay = document.getElementById('map-overlay');
 const mapCloseBtn = document.getElementById('map-close-btn');
 let nlMap = null;
+let routeLayer = null;
 
 // Helpers datum
 
@@ -97,11 +114,14 @@ function createInitialTrucks() {
   return trucks;
 }
 
-// Dummy order-details
+// Dummy order-details met locatie + coördinaten
 function createDummyOrderDetails(orderId, label, info) {
   const today = formatDate(new Date());
+  const cityOptions = ['Amsterdam', 'Rotterdam', 'Utrecht', 'Eindhoven'];
+  const location = cityOptions[orderId % cityOptions.length];
   const postcode = `10${(orderId % 90 + 10).toString().padStart(2, '0')}AB`;
-  const location = ['Amsterdam', 'Rotterdam', 'Utrecht', 'Eindhoven'][orderId % 4];
+
+  const coord = CITY_COORDS[location] || { lat: 52.1, lng: 5.3 }; // midden NL
   const totalPallets = (orderId % 3) + 1;
 
   const lines = [
@@ -130,6 +150,8 @@ function createDummyOrderDetails(orderId, label, info) {
     postcode,
     location,
     totalPallets,
+    lat: coord.lat,
+    lng: coord.lng,
     lines
   };
 }
@@ -168,6 +190,8 @@ function createTruck(name) {
       postcode: details.postcode,
       location: details.location,
       totalPallets: details.totalPallets,
+      lat: details.lat,
+      lng: details.lng,
       lines: details.lines
     };
   });
@@ -412,6 +436,55 @@ function hideOrderDetail() {
   orderDetailBodyEl.innerHTML = '';
 }
 
+// Kaart helpers: afstand + routeplanning
+
+function distanceKm(a, b) {
+  const dx = a.lat - b.lat;
+  const dy = a.lng - b.lng;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * Bouw een route in volgorde van "dichtstbijzijnde volgende stop"
+ * Start = START_LOCATION
+ * Alleen orders die in de truck zitten (assignedSlotIndex !== null).
+ */
+function buildRouteStops(truck) {
+  const loaded = truck.orders.filter(
+    o => o.assignedSlotIndex !== null && typeof o.lat === 'number' && typeof o.lng === 'number'
+  );
+
+  const remaining = loaded.map(o => ({
+    id: o.id,
+    label: o.label,
+    location: o.location,
+    lat: o.lat,
+    lng: o.lng
+  }));
+
+  const route = [];
+  let current = { lat: START_LOCATION.lat, lng: START_LOCATION.lng };
+
+  while (remaining.length) {
+    let bestIndex = 0;
+    let bestDist = Infinity;
+
+    remaining.forEach((o, idx) => {
+      const d = distanceKm(current, { lat: o.lat, lng: o.lng });
+      if (d < bestDist) {
+        bestDist = d;
+        bestIndex = idx;
+      }
+    });
+
+    const next = remaining.splice(bestIndex, 1)[0];
+    route.push(next);
+    current = { lat: next.lat, lng: next.lng };
+  }
+
+  return route;
+}
+
 // Kaart overlay
 
 function showMap() {
@@ -423,8 +496,51 @@ function showMap() {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap-bijdragers'
     }).addTo(nlMap);
+    routeLayer = L.layerGroup().addTo(nlMap);
   } else if (nlMap) {
     setTimeout(() => nlMap.invalidateSize(), 100);
+  }
+
+  if (!nlMap || !routeLayer) return;
+
+  routeLayer.clearLayers();
+
+  const truck = getTruckById(state.selectedTruckId);
+  if (!truck) {
+    nlMap.setView([52.1, 5.3], 7);
+    return;
+  }
+
+  const routeStops = buildRouteStops(truck);
+
+  // Startpunt marker
+  const points = [];
+  const startMarker = L.marker([START_LOCATION.lat, START_LOCATION.lng]).bindPopup(
+    START_LOCATION.label
+  );
+  routeLayer.addLayer(startMarker);
+  points.push([START_LOCATION.lat, START_LOCATION.lng]);
+
+  // Markers voor elke order in routevolgorde
+  routeStops.forEach(stop => {
+    const marker = L.marker([stop.lat, stop.lng]).bindPopup(
+      `${stop.label} – ${stop.location}`
+    );
+    routeLayer.addLayer(marker);
+    points.push([stop.lat, stop.lng]);
+  });
+
+  // Polyline tekenen als er minstens één stop is
+  if (points.length > 1) {
+    const poly = L.polyline(points, {
+      color: '#2b6cb0',
+      weight: 4,
+      opacity: 0.85
+    });
+    routeLayer.addLayer(poly);
+    nlMap.fitBounds(poly.getBounds(), { padding: [30, 30] });
+  } else {
+    nlMap.setView([52.1, 5.3], 7);
   }
 }
 
@@ -549,7 +665,7 @@ function handleSlotClick(truck, slotIndex) {
     return;
   }
 
-  // Gevuld slot én er is een andere order geselecteerd -> laten we nu nog niks doen
+  // Gevuld slot én er is een andere order geselecteerd -> nu nog niks mee doen
 }
 
 // Truck-navigatie
