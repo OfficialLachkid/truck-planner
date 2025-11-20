@@ -9,7 +9,6 @@ const START_LOCATION = {
   label: 'Start: Almere – Wittevrouwen 1'
 };
 
-
 // Dummy coördinaten per stad (kan later echte geocoding worden)
 const CITY_COORDS = {
   Amsterdam: { lat: 52.3728, lng: 4.8936 },
@@ -85,7 +84,7 @@ function getRelativeLabel(dayIndex) {
   if (dayIndex === 0) return 'Vandaag';
   if (dayIndex === 1) return 'Morgen';
   if (dayIndex === -1) return 'Gisteren';
-  return ''; // voor andere dagen niks speciaals
+  return '';
 }
 
 // Grote datum-tekst
@@ -123,7 +122,7 @@ function createInitialTrucks() {
 // Dummy order-details met locatie + coördinaten
 function createDummyOrderDetails(orderId, label, info) {
   const today = formatDate(new Date());
-  const cityOptions = ['Amsterdam', 'Rotterdam', 'Utrecht', 'Eindhoven', 'Den-Haag'];
+  const cityOptions = ['Amsterdam', 'Rotterdam', 'Utrecht', 'Eindhoven', 'Den Haag'];
   const location = cityOptions[orderId % cityOptions.length];
   const postcode = `10${(orderId % 90 + 10).toString().padStart(2, '0')}AB`;
 
@@ -443,7 +442,7 @@ function hideOrderDetail() {
   orderDetailBodyEl.innerHTML = '';
 }
 
-// Kaart helpers: afstand + routeplanning
+// Kaart helpers
 
 function distanceKm(a, b) {
   const dx = a.lat - b.lat;
@@ -452,9 +451,14 @@ function distanceKm(a, b) {
 }
 
 /**
- * Bouw een route in volgorde van "dichtstbijzijnde volgende stop"
- * Start = START_LOCATION
- * Alleen orders die in de truck zitten (assignedSlotIndex !== null).
+ * ROUTE VOLGORDE OP BASIS VAN TRUCK-INDDELING
+ *
+ * Achterkant (onderste slots) wordt eerst gelost, voorkant (bovenste slots) als laatste.
+ * Slotindex loopt van 0 (helemaal vooraan) tot 32 (helemaal achteraan),
+ * dus we sorteren op assignedSlotIndex **aflopend**.
+ *
+ * De route wordt:
+ *   startlocatie -> achterste order -> ... -> voorste order
  */
 function buildRouteStops(truck) {
   const loaded = truck.orders.filter(
@@ -464,35 +468,17 @@ function buildRouteStops(truck) {
       typeof o.lng === 'number'
   );
 
-  const remaining = loaded.map(o => ({
+  // Sorteer van achter naar voor in de vrachtwagen
+  loaded.sort((a, b) => b.assignedSlotIndex - a.assignedSlotIndex);
+
+  // Zet om naar simpele stop-structuur
+  return loaded.map(o => ({
     id: o.id,
     label: o.label,
     location: o.location,
     lat: o.lat,
     lng: o.lng
   }));
-
-  const route = [];
-  let current = { lat: START_LOCATION.lat, lng: START_LOCATION.lng };
-
-  while (remaining.length) {
-    let bestIndex = 0;
-    let bestDist = Infinity;
-
-    remaining.forEach((o, idx) => {
-      const d = distanceKm(current, { lat: o.lat, lng: o.lng });
-      if (d < bestDist) {
-        bestDist = d;
-        bestIndex = idx;
-      }
-    });
-
-    const next = remaining.splice(bestIndex, 1)[0];
-    route.push(next);
-    current = { lat: next.lat, lng: next.lng };
-  }
-
-  return route;
 }
 
 // Kaart overlay
@@ -553,7 +539,8 @@ function showMap() {
   routeLayer.addLayer(startMarker);
   points.push(startLatLng);
 
-  // Polyline-punten in routevolgorde, maar zonder dubbele adressen
+  // Polyline-punten in de volgorde van lossen (achter -> voor),
+  // maar zonder dubbele adressen in de lijn
   const seenPointKeys = new Set();
   routeStops.forEach(stop => {
     const key = `${stop.lat.toFixed(5)},${stop.lng.toFixed(5)}`;
