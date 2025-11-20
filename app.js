@@ -101,7 +101,12 @@ function createTruck(name) {
     { id: nextOrderId++, label: 'Order B', info: 'Klant Y' },
     { id: nextOrderId++, label: 'Order C', info: 'Klant Z' },
     { id: nextOrderId++, label: 'Order D', info: 'Klant X' },
-    { id: nextOrderId++, label: 'Order E', info: 'Klant Y' }
+    { id: nextOrderId++, label: 'Order E', info: 'Klant Y' },
+    { id: nextOrderId++, label: 'Order F', info: 'Klant X' },
+    { id: nextOrderId++, label: 'Order G', info: 'Klant Y' },
+    { id: nextOrderId++, label: 'Order H', info: 'Klant Z' },
+    { id: nextOrderId++, label: 'Order I', info: 'Klant X' },
+    { id: nextOrderId++, label: 'Order J', info: 'Klant Y' }
   ].map(o => ({ ...o, truckId, assignedSlotIndex: null }));
 
   return {
@@ -155,6 +160,12 @@ function renderTruckList() {
     card.className = 'truck-card';
     card.dataset.truckId = truck.id;
 
+    // check of truck vol is (alle slots bezet)
+    const isFull = truck.slots.every(slot => slot.orderId !== null);
+    if (isFull) {
+      card.classList.add('truck-full');
+    }
+
     const roof = document.createElement('div');
     roof.className = 'truck-roof';
 
@@ -207,31 +218,58 @@ function openTruckDetail(truckId) {
 function renderSlots(truck) {
   slotsGridEl.innerHTML = '';
 
-  truck.slots.forEach((slotObj, index) => {
-    const { orderId, shape } = slotObj;
+  const totalRows = Math.ceil(NUM_SLOTS / SLOTS_PER_ROW);
 
-    const slotEl = document.createElement('div');
-    slotEl.classList.add('slot');
-    slotEl.dataset.index = index;
+  for (let row = 0; row < totalRows; row++) {
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'slots-row';
 
-    if (orderId === null) {
-      slotEl.classList.add('empty');
-    } else {
-      slotEl.classList.add('filled');
-      const order = truck.orders.find(o => o.id === orderId);
-      slotEl.textContent = order ? order.label.replace('Order ', '') : '?';
+    const indices = getRowSlotIndices(row);
+    const [leftIdx, midIdx, rightIdx] = indices;
+
+    const left = truck.slots[leftIdx];
+    const mid = midIdx !== undefined ? truck.slots[midIdx] : null;
+    const right = rightIdx !== undefined ? truck.slots[rightIdx] : null;
+
+    const rowHasRect = (left && left.shape === 'rect') ||
+                       (right && right.shape === 'rect');
+
+    // Helper om één slot element te maken
+    const createSlotEl = (slotObj, idx) => {
+      const slotEl = document.createElement('div');
+      slotEl.classList.add('slot', slotObj.shape === 'rect' ? 'rect' : 'square');
+      slotEl.dataset.index = idx;
+
+      if (slotObj.orderId === null) {
+        slotEl.classList.add('empty');
+      } else {
+        slotEl.classList.add('filled');
+        const order = truck.orders.find(o => o.id === slotObj.orderId);
+        slotEl.textContent = order ? order.label.replace('Order ', '') : '?';
+      }
+
+      slotEl.addEventListener('click', (e) => {
+        handleSlotClick(truck, idx, e);
+      });
+
+      return slotEl;
+    };
+
+    // Volgorde: links, midden (alleen als geen rect in rij), rechts
+    if (left) {
+      rowDiv.appendChild(createSlotEl(left, leftIdx));
     }
 
-    if (shape === 'rect') {
-      slotEl.classList.add('rect');
+    if (!rowHasRect && mid) {
+      rowDiv.appendChild(createSlotEl(mid, midIdx));
     }
 
-    slotEl.addEventListener('click', (e) => {
-      handleSlotClick(truck, index, e);
-    });
+    if (right) {
+      rowDiv.appendChild(createSlotEl(right, rightIdx));
+    }
 
-    slotsGridEl.appendChild(slotEl);
-  });
+    slotsGridEl.appendChild(rowDiv);
+  }
 }
 
 function renderOrders(truck) {
@@ -287,6 +325,7 @@ function handleOrderClick(orderId) {
  * Controle: mag er in deze rij nog een order bij?
  * Regel:
  *  - als er een rechthoekige slot in de rij is, dan max 2 bezette slots in die rij.
+ *  - zonder rechthoek kan je 3 vierkanten hebben.
  */
 function canPlaceOrderInRow(truck, targetSlotIndex) {
   const rowIndex = getRowIndex(targetSlotIndex);
@@ -304,26 +343,37 @@ function canPlaceOrderInRow(truck, targetSlotIndex) {
 
 /**
  * Slot vorm aanpassen: vierkant of rechthoek
+ * - Rechthoek mag alleen op linker of rechter positie in de rij.
+ * - Als hij rechthoek wordt, wordt het middelste slot van de rij leeggemaakt
+ *   (order gaat terug naar de lijst) en verdwijnt visueel.
  */
 function setSlotShape(truck, slotIndex, newShape) {
   const slot = truck.slots[slotIndex];
   if (!slot) return;
-
   if (slot.shape === newShape) return; // niks te doen
 
-  // Als we naar rechthoek gaan, controleren of dit mag qua capaciteit
-  if (newShape === 'rect') {
-    const rowIndex = getRowIndex(slotIndex);
-    const rowIndices = getRowSlotIndices(rowIndex);
-    const rowSlots = rowIndices.map(i => truck.slots[i]);
-    const occupiedCount = rowSlots.filter(s => s && s.orderId !== null).length;
+  const rowIndex = getRowIndex(slotIndex);
+  const rowIndices = getRowSlotIndices(rowIndex);
+  const posInRow = rowIndices.indexOf(slotIndex);
+  const midIdx = rowIndices[1]; // kan undefined zijn op de laatste rij
 
-    if (occupiedCount >= 3) {
-      alert(
-        'In deze rij staan al 3 pallets. ' +
-        'Je kunt deze positie niet rechthoekig maken zonder eerst een slot leeg te maken.'
-      );
+  if (newShape === 'rect') {
+    // alleen links (pos 0) of rechts (pos 2)
+    if (posInRow === 1) {
+      alert('Een rechthoek kan alleen op de linker- of rechterpositie in een rij worden gezet.');
       return;
+    }
+
+    // middelste slot leeghalen als daar een order in staat
+    if (midIdx !== undefined) {
+      const midSlot = truck.slots[midIdx];
+      if (midSlot && midSlot.orderId !== null) {
+        const order = truck.orders.find(o => o.id === midSlot.orderId);
+        if (order) {
+          order.assignedSlotIndex = null;
+        }
+        midSlot.orderId = null;
+      }
     }
   }
 
@@ -369,7 +419,7 @@ function handleSlotClick(truck, slotIndex, event) {
   if (currentOrderId === null && state.selectedOrderId !== null) {
     if (!canPlaceOrderInRow(truck, slotIndex)) {
       alert(
-        'In deze rij is al een rechthoekige slot en er staan al 2 pallets.\n' +
+        'In deze rij is al een rechthoekige positie en er staan al 2 pallets.\n' +
         'Er past geen derde pallet meer in deze rij.'
       );
       return;
@@ -477,6 +527,7 @@ backToListBtn.addEventListener('click', () => {
   state.selectedTruckId = null;
   state.selectedOrderId = null;
   showListView();
+  renderTruckList();   // overzicht bijwerken (zodat volle trucks rood worden)
 });
 
 prevTruckBtn.addEventListener('click', goToPrevTruck);
