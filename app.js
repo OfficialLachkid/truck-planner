@@ -1,3 +1,29 @@
+// --- Kleine CSS injectie voor genummerde route-markers ---
+(() => {
+  const css = `
+    .route-marker-inner {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #2b6cb0;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 0 0 2px #ffffff, 0 2px 4px rgba(0,0,0,0.4);
+    }
+    .route-marker-inner.home {
+      background: #f6b21a;
+      font-size: 16px;
+    }
+  `;
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
+
 // Aantal vakken per vrachtwagen
 const NUM_SLOTS = 33;
 const SLOTS_PER_ROW = 3;
@@ -451,7 +477,7 @@ function distanceKm(a, b) {
 }
 
 /**
- * ROUTE VOLGORDE OP BASIS VAN TRUCK-INDDELING
+ * ROUTE VOLGORDE OP BASIS VAN TRUCK-INDELING
  *
  * Achterkant (onderste slots) wordt eerst gelost, voorkant (bovenste slots) als laatste.
  * Slotindex loopt van 0 (helemaal vooraan) tot 32 (helemaal achteraan),
@@ -516,8 +542,9 @@ function showMap() {
   const routeStops = buildRouteStops(truck);
 
   // Groepeer stops per adres (lat+lng) voor markers
+  // en onthoud de eerste positie in de route voor nummering
   const markerGroups = new Map();
-  routeStops.forEach(stop => {
+  routeStops.forEach((stop, idx) => {
     const key = `${stop.lat.toFixed(5)},${stop.lng.toFixed(5)}`;
     let group = markerGroups.get(key);
     if (!group) {
@@ -525,17 +552,26 @@ function showMap() {
         lat: stop.lat,
         lng: stop.lng,
         location: stop.location,
-        orders: []
+        orders: [],
+        firstIndex: idx
       };
       markerGroups.set(key, group);
     }
     group.orders.push(stop.label);
   });
 
-  // Startpunt marker
+  // Startpunt marker met HOME-icoon
   const points = [];
   const startLatLng = [START_LOCATION.lat, START_LOCATION.lng];
-  const startMarker = L.marker(startLatLng).bindPopup(START_LOCATION.label);
+
+  const homeIcon = L.divIcon({
+    className: 'route-marker home-marker',
+    html: '<div class="route-marker-inner home">🏠</div>',
+    iconSize: [26, 26],
+    iconAnchor: [13, 26]
+  });
+
+  const startMarker = L.marker(startLatLng, { icon: homeIcon }).bindPopup(START_LOCATION.label);
   routeLayer.addLayer(startMarker);
   points.push(startLatLng);
 
@@ -550,11 +586,24 @@ function showMap() {
     }
   });
 
-  // Markers voor elke unieke locatie met ALLE orders in popup
-  markerGroups.forEach(group => {
+  // Markers voor elke unieke locatie, genummerd op volgorde van de route
+  const sortedGroups = Array.from(markerGroups.values()).sort(
+    (a, b) => a.firstIndex - b.firstIndex
+  );
+
+  sortedGroups.forEach((group, idx) => {
+    const stopNumber = idx + 1;
     const ordersList = group.orders.join(', ');
-    const popupHtml = `<strong>${group.location}</strong><br>Orders: ${ordersList}`;
-    const marker = L.marker([group.lat, group.lng]).bindPopup(popupHtml);
+    const popupHtml = `<strong>Stop ${stopNumber} – ${group.location}</strong><br>Orders: ${ordersList}`;
+
+    const numberIcon = L.divIcon({
+      className: 'route-marker',
+      html: `<div class="route-marker-inner">${stopNumber}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 26]
+    });
+
+    const marker = L.marker([group.lat, group.lng], { icon: numberIcon }).bindPopup(popupHtml);
     routeLayer.addLayer(marker);
   });
 
