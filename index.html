@@ -17,16 +17,19 @@
 
     <!-- HEADER VOOR DAG-NAVIGATIE (alleen in lijst-view zichtbaar) -->
     <header id="day-header" class="top-bar">
-      <button id="prev-day-btn" class="nav-btn">&larr;</button>
-      <div id="day-label" class="day-label">Vandaag</div>
-      <button id="next-day-btn" class="nav-btn">&rarr;</button>
+      <button id="prev-day-btn" class="nav-btn"></button>
+      <div class="day-label-wrapper">
+        <div id="day-context-label" class="day-context-label">Vandaag</div>
+        <div id="day-label" class="day-label">20-11-2025</div>
+      </div>
+      <button id="next-day-btn" class="nav-btn"></button>
     </header>
 
     <!-- HEADER VOOR TRUCK-NAVIGATIE (alleen in detail-view zichtbaar) -->
     <header id="truck-header" class="top-bar detail-top-bar hidden">
-      <button id="prev-truck-btn" class="nav-btn">&larr;</button>
-      <div id="truck-header-label" class="day-label">Truck 1</div>
-      <button id="next-truck-btn" class="nav-btn">&rarr;</button>
+      <button id="prev-truck-btn" class="nav-btn"></button>
+      <div id="truck-header-label" class="day-label">Truck 1 - 20-11-2025</div>
+      <button id="next-truck-btn" class="nav-btn"></button>
       <button id="delete-truck-btn" class="danger-btn">Verwijder</button>
     </header>
 

@@ -132,11 +132,27 @@ body {
   font-weight: 900;
 }
 
+/* Wrapper om context + datum in header */
+.day-label-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1 1 auto;
+}
+
+/* Kleine tekst "Vandaag / Morgen / Gisteren" */
+.day-context-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffecec;
+  margin-bottom: -2px;
+}
+
+/* Grote datum zelf */
 .day-label {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   text-align: center;
-  flex: 1 1 auto;
   color: #ffffff;
 }
 

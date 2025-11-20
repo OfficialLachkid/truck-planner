@@ -4,10 +4,11 @@ const SLOTS_PER_ROW = 3;
 
 // Startlocatie van de truck
 const START_LOCATION = {
-  lat: 52.5185,        // ongeveer Lelystad
-  lng: 5.4714,
-  label: 'Start: Lelystad – Wittevrouwen 1'
+  lat: 52.3508,        // ongeveer Almere
+  lng: 5.2647,
+  label: 'Start: Almere – Wittevrouwen 1'
 };
+
 
 // Dummy coördinaten per stad (kan later echte geocoding worden)
 const CITY_COORDS = {
@@ -36,6 +37,7 @@ const addTruckBtn = document.getElementById('add-truck-btn');
 const prevDayBtn = document.getElementById('prev-day-btn');
 const nextDayBtn = document.getElementById('next-day-btn');
 const dayLabelEl = document.getElementById('day-label');
+const dayContextEl = document.getElementById('day-context-label');
 
 const dayHeaderEl = document.getElementById('day-header');
 const truckHeaderEl = document.getElementById('truck-header');
@@ -78,19 +80,23 @@ function formatDate(d) {
   return `${day}-${month}-${year}`;
 }
 
+// Kleine labeltekst ("Vandaag", "Morgen", etc.)
+function getRelativeLabel(dayIndex) {
+  if (dayIndex === 0) return 'Vandaag';
+  if (dayIndex === 1) return 'Morgen';
+  if (dayIndex === -1) return 'Gisteren';
+  return ''; // voor andere dagen niks speciaals
+}
+
+// Grote datum-tekst
+function getDayLabel(dayIndex) {
+  const d = createDateByIndex(dayIndex);
+  return formatDate(d);
+}
+
 function getDayKey(dayIndex) {
   const d = createDateByIndex(dayIndex);
   return d.toISOString().slice(0, 10);
-}
-
-function getDayLabel(dayIndex) {
-  const d = createDateByIndex(dayIndex);
-  const base = formatDate(d);
-
-  if (dayIndex === 0) return `Vandaag - ${base}`;
-  if (dayIndex === 1) return `Morgen - ${base}`;
-  if (dayIndex === -1) return `Gisteren - ${base}`;
-  return base;
 }
 
 // Dag initialiseren
@@ -117,7 +123,7 @@ function createInitialTrucks() {
 // Dummy order-details met locatie + coördinaten
 function createDummyOrderDetails(orderId, label, info) {
   const today = formatDate(new Date());
-  const cityOptions = ['Amsterdam', 'Rotterdam', 'Utrecht', 'Eindhoven'];
+  const cityOptions = ['Amsterdam', 'Rotterdam', 'Utrecht', 'Eindhoven', 'Den-Haag'];
   const location = cityOptions[orderId % cityOptions.length];
   const postcode = `10${(orderId % 90 + 10).toString().padStart(2, '0')}AB`;
 
@@ -129,19 +135,19 @@ function createDummyOrderDetails(orderId, label, info) {
       article: `ART-${orderId}01`,
       description: `Doos type 1 voor ${label}`,
       boxes: 4 + (orderId % 5),
-      pallets: 0.5
+      pallets: 1
     },
     {
       article: `ART-${orderId}02`,
       description: `Doos type 2 voor ${label}`,
       boxes: 8 + (orderId % 7),
-      pallets: 0.75
+      pallets: 1
     },
     {
       article: `ART-${orderId}03`,
       description: `Doos type 3 voor ${label}`,
       boxes: 10 + (orderId % 9),
-      pallets: 1
+      pallets: 2
     }
   ];
 
@@ -233,6 +239,7 @@ function getRowSlotIndices(rowIndex) {
 // Rendering
 
 function renderDayHeader() {
+  dayContextEl.textContent = getRelativeLabel(state.currentDayIndex);
   dayLabelEl.textContent = getDayLabel(state.currentDayIndex);
 }
 
@@ -522,6 +529,23 @@ function showMap() {
 
   const routeStops = buildRouteStops(truck);
 
+  // Groepeer stops per adres (lat+lng) voor markers
+  const markerGroups = new Map();
+  routeStops.forEach(stop => {
+    const key = `${stop.lat.toFixed(5)},${stop.lng.toFixed(5)}`;
+    let group = markerGroups.get(key);
+    if (!group) {
+      group = {
+        lat: stop.lat,
+        lng: stop.lng,
+        location: stop.location,
+        orders: []
+      };
+      markerGroups.set(key, group);
+    }
+    group.orders.push(stop.label);
+  });
+
   // Startpunt marker
   const points = [];
   const startLatLng = [START_LOCATION.lat, START_LOCATION.lng];
@@ -529,15 +553,25 @@ function showMap() {
   routeLayer.addLayer(startMarker);
   points.push(startLatLng);
 
-  // Markers voor iedere stop in routevolgorde
+  // Polyline-punten in routevolgorde, maar zonder dubbele adressen
+  const seenPointKeys = new Set();
   routeStops.forEach(stop => {
-    const latLng = [stop.lat, stop.lng];
-    const marker = L.marker(latLng).bindPopup(`${stop.label} – ${stop.location}`);
-    routeLayer.addLayer(marker);
-    points.push(latLng);
+    const key = `${stop.lat.toFixed(5)},${stop.lng.toFixed(5)}`;
+    if (!seenPointKeys.has(key)) {
+      seenPointKeys.add(key);
+      points.push([stop.lat, stop.lng]);
+    }
   });
 
-  // Polyline tekenen als er minstens één stop is (dus 2 punten incl. start)
+  // Markers voor elke unieke locatie met ALLE orders in popup
+  markerGroups.forEach(group => {
+    const ordersList = group.orders.join(', ');
+    const popupHtml = `<strong>${group.location}</strong><br>Orders: ${ordersList}`;
+    const marker = L.marker([group.lat, group.lng]).bindPopup(popupHtml);
+    routeLayer.addLayer(marker);
+  });
+
+  // Polyline tekenen als er minstens één stop is
   if (points.length > 1) {
     const poly = L.polyline(points, {
       color: '#2b6cb0',
@@ -547,7 +581,6 @@ function showMap() {
     routeLayer.addLayer(poly);
     nlMap.fitBounds(poly.getBounds(), { padding: [30, 30] });
   } else {
-    // Alleen startpunt → zoom op Nederland
     nlMap.setView([52.1, 5.3], 7);
   }
 }
