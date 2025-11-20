@@ -58,13 +58,48 @@
           <p class="orders-hint">
             Klik een order en daarna een leeg vak.<br>
             Klik op een gevuld vak om de order terug te zetten.<br>
-            Klik op een leeg vak zonder order om de vorm (vierkant/rechthoek) te kiezen.
+            Klik op een leeg vak zonder order om de vorm (vierkant/rechthoek) te kiezen.<br>
+            Klik twee keer op dezelfde vrije order om details (tabel) te bekijken.
           </p>
           <ul id="orders-list" class="orders-list">
             <!-- orders via JS -->
           </ul>
         </aside>
       </section>
+
+      <!-- ORDER DETAIL OVERLAY (alleen in detail-view) -->
+      <div
+        id="order-detail-overlay"
+        class="order-detail-overlay hidden"
+        style="display:none;"
+      >
+        <div class="order-detail-card">
+          <h3>Order details</h3>
+
+          <div id="order-detail-meta" class="order-detail-meta">
+            <!-- meta info via JS -->
+          </div>
+
+          <table class="order-detail-table">
+            <thead>
+              <tr>
+                <th>Artikelnummer</th>
+                <th>Omschrijving</th>
+                <th>Aantal dozen</th>
+                <th>Pallets</th>
+              </tr>
+            </thead>
+            <tbody id="order-detail-body">
+              <!-- rows via JS -->
+            </tbody>
+          </table>
+
+          <button id="order-detail-close" class="nav-btn order-detail-close-btn">
+            Sluit
+          </button>
+        </div>
+      </div>
+
     </main>
 
   </div>

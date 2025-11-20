@@ -32,6 +32,12 @@ const backToListBtn = document.getElementById('back-to-list-btn');
 const slotsGridEl = document.getElementById('slots-grid');
 const ordersListEl = document.getElementById('orders-list');
 
+// Order detail overlay
+const orderDetailOverlay = document.getElementById('order-detail-overlay');
+const orderDetailMetaEl = document.getElementById('order-detail-meta');
+const orderDetailBodyEl = document.getElementById('order-detail-body');
+const orderDetailCloseBtn = document.getElementById('order-detail-close');
+
 // Helpers voor datum
 
 function createDateByIndex(dayIndex) {
@@ -86,6 +92,45 @@ function createInitialTrucks() {
   return trucks;
 }
 
+/**
+ * Dummy order detail-gegevens genereren
+ */
+function createDummyOrderDetails(orderId, label, info) {
+  const today = formatDate(new Date());
+  const postcode = `10${(orderId % 90 + 10).toString().padStart(2, '0')}AB`;
+  const location = ['Amsterdam', 'Rotterdam', 'Utrecht', 'Eindhoven'][orderId % 4];
+  const totalPallets = (orderId % 3) + 1; // 1-3 pallets
+
+  const lines = [
+    {
+      article: `ART-${orderId}01`,
+      description: `Doos type 1 voor ${label}`,
+      boxes: 4 + (orderId % 5),
+      pallets: 0.5
+    },
+    {
+      article: `ART-${orderId}02`,
+      description: `Doos type 2 voor ${label}`,
+      boxes: 8 + (orderId % 7),
+      pallets: 0.75
+    },
+    {
+      article: `ART-${orderId}03`,
+      description: `Doos type 3 voor ${label}`,
+      boxes: 10 + (orderId % 9),
+      pallets: 1
+    }
+  ];
+
+  return {
+    createdAt: today,
+    postcode,
+    location,
+    totalPallets,
+    lines
+  };
+}
+
 function createTruck(name) {
   const truckId = nextTruckId++;
 
@@ -95,19 +140,36 @@ function createTruck(name) {
     shape: 'square'
   }));
 
-  // dummy orders voor deze truck
-  const orders = [
-    { id: nextOrderId++, label: 'Order A', info: 'Klant X' },
-    { id: nextOrderId++, label: 'Order B', info: 'Klant Y' },
-    { id: nextOrderId++, label: 'Order C', info: 'Klant Z' },
-    { id: nextOrderId++, label: 'Order D', info: 'Klant X' },
-    { id: nextOrderId++, label: 'Order E', info: 'Klant Y' },
-    { id: nextOrderId++, label: 'Order F', info: 'Klant X' },
-    { id: nextOrderId++, label: 'Order G', info: 'Klant Y' },
-    { id: nextOrderId++, label: 'Order H', info: 'Klant Z' },
-    { id: nextOrderId++, label: 'Order I', info: 'Klant X' },
-    { id: nextOrderId++, label: 'Order J', info: 'Klant Y' }
-  ].map(o => ({ ...o, truckId, assignedSlotIndex: null }));
+  // basis dummy orders voor deze truck
+  const baseOrders = [
+    { label: 'Order A', info: 'Klant X' },
+    { label: 'Order B', info: 'Klant Y' },
+    { label: 'Order C', info: 'Klant Z' },
+    { label: 'Order D', info: 'Klant X' },
+    { label: 'Order E', info: 'Klant Y' },
+    { label: 'Order F', info: 'Klant X' },
+    { label: 'Order G', info: 'Klant Y' },
+    { label: 'Order H', info: 'Klant Z' },
+    { label: 'Order I', info: 'Klant X' },
+    { label: 'Order J', info: 'Klant Y' }
+  ];
+
+  const orders = baseOrders.map(tpl => {
+    const id = nextOrderId++;
+    const details = createDummyOrderDetails(id, tpl.label, tpl.info);
+    return {
+      id,
+      label: tpl.label,
+      info: tpl.info,
+      truckId,
+      assignedSlotIndex: null,
+      createdAt: details.createdAt,
+      postcode: details.postcode,
+      location: details.location,
+      totalPallets: details.totalPallets,
+      lines: details.lines
+    };
+  });
 
   return {
     id: truckId,
@@ -203,6 +265,7 @@ function updateTruckHeader() {
 function openTruckDetail(truckId) {
   state.selectedTruckId = truckId;
   state.selectedOrderId = null;
+  hideOrderDetail(); // zorg dat overlay altijd uit is
 
   const truck = getTruckById(truckId);
   if (!truck) return;
@@ -308,18 +371,75 @@ function renderOrders(truck) {
   });
 }
 
+// Order detail overlay logica
+
+function showOrderDetail(order) {
+  orderDetailMetaEl.innerHTML = `
+    <div><strong>Order:</strong> ${order.label}</div>
+    <div><strong>Klant:</strong> ${order.info}</div>
+    <div><strong>Datum:</strong> ${order.createdAt}</div>
+    <div><strong>Locatie:</strong> ${order.location}</div>
+    <div><strong>Postcode:</strong> ${order.postcode}</div>
+    <div><strong>Totaal pallets:</strong> ${order.totalPallets}</div>
+  `;
+
+  orderDetailBodyEl.innerHTML = '';
+
+  order.lines.forEach(line => {
+    const tr = document.createElement('tr');
+
+    const tdArticle = document.createElement('td');
+    tdArticle.textContent = line.article;
+    const tdDesc = document.createElement('td');
+    tdDesc.textContent = line.description;
+    const tdBoxes = document.createElement('td');
+    tdBoxes.textContent = line.boxes;
+    const tdPallets = document.createElement('td');
+    tdPallets.textContent = line.pallets;
+
+    tr.appendChild(tdArticle);
+    tr.appendChild(tdDesc);
+    tr.appendChild(tdBoxes);
+    tr.appendChild(tdPallets);
+
+    orderDetailBodyEl.appendChild(tr);
+  });
+
+  orderDetailOverlay.classList.remove('hidden');
+  orderDetailOverlay.style.display = 'flex';
+}
+
+function hideOrderDetail() {
+  orderDetailOverlay.classList.add('hidden');
+  orderDetailOverlay.style.display = 'none';
+  orderDetailMetaEl.innerHTML = '';
+  orderDetailBodyEl.innerHTML = '';
+}
+
 // INTERACTIE
 
 function handleOrderClick(orderId) {
-  // select/deselect
-  if (state.selectedOrderId === orderId) {
-    state.selectedOrderId = null;
-  } else {
-    state.selectedOrderId = orderId;
-  }
-
   const truck = getTruckById(state.selectedTruckId);
   if (!truck) return;
+
+  const clickedOrder = truck.orders.find(o => o.id === orderId);
+  if (!clickedOrder) return;
+
+  const isFree = clickedOrder.assignedSlotIndex === null;
+
+  // Tweede klik op dezelfde order:
+  if (state.selectedOrderId === orderId) {
+    // Alleen detail tonen als de order nog géén slot heeft
+    if (isFree) {
+      showOrderDetail(clickedOrder);
+    }
+    return;
+  }
+
+  // Nieuwe order selecteren (eerste klik op deze order)
+  state.selectedOrderId = orderId;
+  hideOrderDetail(); // voor de zekerheid sluiten als we van order wisselen
+
   renderOrders(truck);
   renderSlots(truck);
 }
@@ -504,6 +624,7 @@ prevDayBtn.addEventListener('click', () => {
   state.currentDayIndex -= 1;
   state.selectedTruckId = null;
   state.selectedOrderId = null;
+  hideOrderDetail();
   ensureDayExists(state.currentDayIndex);
   showListView();
   renderTruckList();
@@ -513,6 +634,7 @@ nextDayBtn.addEventListener('click', () => {
   state.currentDayIndex += 1;
   state.selectedTruckId = null;
   state.selectedOrderId = null;
+  hideOrderDetail();
   ensureDayExists(state.currentDayIndex);
   showListView();
   renderTruckList();
@@ -529,17 +651,37 @@ addTruckBtn.addEventListener('click', () => {
 backToListBtn.addEventListener('click', () => {
   state.selectedTruckId = null;
   state.selectedOrderId = null;
+  hideOrderDetail();
   showListView();
   renderTruckList();   // overzicht bijwerken (zodat volle trucks rood worden)
 });
 
-prevTruckBtn.addEventListener('click', goToPrevTruck);
-nextTruckBtn.addEventListener('click', goToNextTruck);
-deleteTruckBtn.addEventListener('click', deleteCurrentTruck);
+prevTruckBtn.addEventListener('click', () => {
+  hideOrderDetail();
+  goToPrevTruck();
+});
+
+nextTruckBtn.addEventListener('click', () => {
+  hideOrderDetail();
+  goToNextTruck();
+});
+
+deleteTruckBtn.addEventListener('click', () => {
+  hideOrderDetail();
+  deleteCurrentTruck();
+});
+
+orderDetailCloseBtn.addEventListener('click', () => {
+  hideOrderDetail();
+  // selectie blijft, maar je kunt nu weer sloten vullen
+});
 
 // VIEW HELPERS
 
 function showListView() {
+  // altijd overlay weg als we terug naar lijst gaan
+  hideOrderDetail();
+
   truckDetailView.classList.remove('active-view');
   truckListView.classList.add('active-view');
   dayHeaderEl.classList.remove('hidden');     // dag-navigatie tonen
@@ -550,6 +692,7 @@ function showListView() {
 
 function init() {
   ensureDayExists(0);
+  hideOrderDetail(); // overlay meteen verbergen
   renderTruckList();
 }
 
