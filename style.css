@@ -8,7 +8,7 @@
 /* Variabelen voor responsieve groottes */
 :root {
   --app-max-width: 520px;
-  --slot-size: clamp(22px, 4.2vw, 32px);
+  --slot-size: clamp(26px, 4.8vw, 40px);
 }
 
 /* Volledig scherm, zwarte achtergrond eromheen */
@@ -27,8 +27,8 @@ body {
   border: 6px solid #222;
   border-radius: 16px;
   width: min(var(--app-max-width), 100%);
-  height: 100vh;            /* schermvullend binnen de rand */
-  max-height: 900px;        /* optioneel max zodat het niet absurd groot wordt op grote schermen */
+  height: 100vh;            
+  max-height: 900px;        
   position: relative;
   padding: 16px;
   display: flex;
@@ -42,9 +42,24 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+  padding: 6px 10px;
+}
+
+/* Rode 3D look balk achter de datum-header */
+#day-header {
+  background: linear-gradient(to bottom, #ff7575, #d13737);
+  box-shadow: 0 3px 5px rgba(0, 0, 0, 0.25);
+  border-radius: 999px;
+}
+
+/* truck-header gewoon transparant laten */
+#truck-header {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .detail-top-bar {
@@ -57,32 +72,38 @@ body {
 
 .nav-btn {
   border: none;
-  background: #eee;
-  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 8px 16px;
   border-radius: 999px;
-  font-size: 16px;
+  font-size: 22px; /* grotere pijlen */
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .nav-btn:hover {
-  background: #ddd;
+  background: #f1f1f1;
 }
 
 .day-label {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 22px;  /* grotere datum */
+  font-weight: 700;
   text-align: center;
   flex: 1 1 auto;
+  color: #ffffff;
+}
+
+/* In truck-header gebruiken we zwarte tekst */
+#truck-header .day-label {
+  color: #222;
 }
 
 .danger-btn {
   border: none;
   background: #e05555;
   color: #fff;
-  padding: 6px 10px;
+  padding: 6px 12px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -98,6 +119,12 @@ body {
   flex: 1 1 auto;
 }
 
+/* Overzichts-view scrollt verticaal */
+#truck-list-view {
+  display: block;
+  overflow-y: auto;
+}
+
 .active-view {
   display: block;
 }
@@ -105,51 +132,50 @@ body {
 /* Truck list view */
 
 .truck-list-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
   padding-top: 10px;
-  gap: 12px;
 }
 
+/* Flex-grid met trucks + plus-knop erin, de view zelf scrollt */
 .truck-list {
   display: flex;
   flex-direction: row;
-  gap: 10px;
   flex-wrap: wrap;
-  max-width: 280px;
+  gap: 14px;
+  align-content: flex-start;
+  width: 100%;
 }
 
-/* Truck kaart in lijst */
+/* Grotere truck kaart in lijst */
 
 .truck-card {
-  width: 55px;
-  height: 180px;
+  width: 80px;
+  height: 230px;
   display: flex;
   flex-direction: column;
   align-items: center;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .truck-roof {
-  width: 40px;
-  height: 35px;
-  border-radius: 6px 6px 2px 2px;
+  width: 60px;
+  height: 45px;
+  border-radius: 10px 10px 4px 4px;
   background: #f6b21a; /* geel */
-  box-shadow: 0 2px 3px rgba(0,0,0,0.15);
+  box-shadow: 0 3px 4px rgba(0,0,0,0.2);
 }
 
 .truck-body {
-  width: 35px;
+  width: 55px;
   flex: 1;
-  margin-top: 4px;
-  border-radius: 4px;
+  margin-top: 6px;
+  border-radius: 6px;
   background: #e4e7ea;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 22px;
-  font-weight: 500;
+  font-size: 26px;
+  font-weight: 600;
 }
 
 /* Volle trucks rood tintje in overzicht */
@@ -162,17 +188,20 @@ body {
   background: #c53030;
 }
 
+/* Plus-knop staat nu in hetzelfde grid als de trucks */
 .add-truck-btn {
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
+  width: 80px;
+  height: 230px;
+  border-radius: 16px;
   border: none;
-  font-size: 36px;
+  font-size: 40px;
   background: #30c48c;
   color: white;
   cursor: pointer;
-  margin-top: 40px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .add-truck-btn:hover {
@@ -191,7 +220,7 @@ body {
 .detail-content {
   display: grid;
   grid-template-columns: 2fr 1.3fr;
-  gap: 12px;
+  gap: 16px;
   height: calc(100% - 40px); /* ruimte onder header */
 }
 
@@ -206,41 +235,43 @@ body {
 .slots-container {
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  overflow-y: auto;
+  align-items: stretch;  /* truck over de volledige hoogte */
+  overflow-y: hidden;
 }
 
 .truck-visual {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  flex: 1;
 }
 
 .detail-truck-roof {
-  width: clamp(70px, 40%, 110px);
-  height: clamp(36px, 7vw, 48px);
-  border-radius: 10px 10px 4px 4px;
+  width: clamp(80px, 45%, 130px);
+  height: clamp(42px, 8vw, 60px);
+  border-radius: 12px 12px 6px 6px;
   background: #f6b21a;
-  box-shadow: 0 3px 4px rgba(0,0,0,0.18);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.25);
 }
 
 .truck-label-front,
 .truck-label-back {
-  font-size: 11px;
+  font-size: 12px;
   color: #555;
 }
 
-/* Layout: rijen met slots (horizontaal) */
+/* Layout: rijen met slots (horizontaal, truck langer op Y-as) */
 
 .slots-grid {
-  width: clamp(120px, 45vw, 180px);
+  width: clamp(140px, 55vw, 220px); /* langere trailer */
   background: #e4e7ea;
-  border-radius: 6px;
-  padding: 8px;
+  border-radius: 8px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;               /* vul hoogte */
 }
 
 .slots-row {
@@ -248,6 +279,7 @@ body {
   flex-direction: row;
   gap: 4px;
   width: 100%;
+  flex: 1;               /* rijen verdelen de hoogte */
 }
 
 .slot {
@@ -258,7 +290,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   min-height: var(--slot-size);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
@@ -279,6 +311,7 @@ body {
   background: #cfeee1;
 }
 
+/* Luxe 3D look voor gevulde pallet-slot */
 .slot.filled {
   background: linear-gradient(#f05757, #d33535);
   border: 1px solid #8a2222;

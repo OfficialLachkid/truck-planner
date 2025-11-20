@@ -153,7 +153,8 @@ function renderTruckList() {
   const day = ensureDayExists(state.currentDayIndex);
   renderDayHeader();
 
-  truckListEl.innerHTML = '';
+  // Verwijder alleen bestaande truck-cards, laat de + knop staan
+  truckListEl.querySelectorAll('.truck-card').forEach(el => el.remove());
 
   day.trucks.forEach((truck, index) => {
     const card = document.createElement('div');
@@ -180,7 +181,8 @@ function renderTruckList() {
       openTruckDetail(truck.id);
     });
 
-    truckListEl.appendChild(card);
+    // Voeg elke truck VOOR de plus-knop toe
+    truckListEl.insertBefore(card, addTruckBtn);
   });
 }
 
@@ -194,7 +196,8 @@ function updateTruckHeader() {
   if (idx === -1) return;
 
   const dLabel = getDayLabel(state.currentDayIndex);
-  truckHeaderLabelEl.textContent = `Truck ${idx + 1} van ${day.trucks.length} - ${dLabel}`;
+  // Alleen "Truck X - datum"
+  truckHeaderLabelEl.textContent = `Truck ${idx + 1} - ${dLabel}`;
 }
 
 function openTruckDetail(truckId) {
@@ -383,7 +386,7 @@ function setSlotShape(truck, slotIndex, newShape) {
 /**
  * Klik op een slot:
  * - Als slot gevuld & geen order-selected -> order terug naar lijst
- * - Als slot leeg & er is een geselecteerde order -> probeer order te plaatsen
+ * - Als slot leeg & er is een geselecteerde order -> plaats de order (mits toegestaan)
  * - Als slot leeg & géén geselecteerde order -> vorm (vierkant/rechthoek) kiezen
  */
 function handleSlotClick(truck, slotIndex, event) {
