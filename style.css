@@ -74,19 +74,67 @@ body {
   display: none !important;
 }
 
+/* Basis look voor ALLE nav-btn knoppen */
 .nav-btn {
   border: none;
   background: rgba(255, 255, 255, 0.9);
   padding: 8px 16px;
   border-radius: 999px;
-  font-size: 22px;
+  font-size: 18px;
   cursor: pointer;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-btn:hover {
   background: #f1f1f1;
 }
+
+/* ==== CHEVRONS voor agenda/truck pijlen ==== */
+
+/* Deze knoppen krijgen chevron-iconen; we verbergen hun originele tekst
+   en tekenen een chevron via ::before */
+#prev-day-btn,
+#next-day-btn,
+#prev-truck-btn,
+#next-truck-btn {
+  position: relative;
+  font-size: 0;         /* originele ← / → tekst verbergen */
+}
+
+/* Links: chevron naar links */
+#prev-day-btn::before,
+#prev-truck-btn::before {
+  content: "‹";
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 1px currentColor;
+}
+
+/* Rechts: chevron naar rechts */
+#next-day-btn::before,
+#next-truck-btn::before {
+  content: "›";
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 1px currentColor;
+}
+
+/* Terug-knop: pijl + tekst blijven zichtbaar, maar iets kleiner en zachter */
+#back-to-list-btn {
+  font-size: 18px;
+}
+
+/* Omdat we net font-size 18 hebben gezet, laten we de pijl mooi uitkomen */
+#back-to-list-btn::first-letter {
+  font-weight: 900;
+}
+
+/* ========================================== */
 
 .day-label {
   font-size: 22px;
