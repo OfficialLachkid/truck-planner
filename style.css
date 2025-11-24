@@ -17,27 +17,22 @@ body {
 }
 
 body {
-  background: #000000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  background: #ffffff; /* geen zwarte randen meer rond de app */
   min-height: 100vh;
   padding: 0;
+  margin: 0;
   overflow: hidden; /* app zelf regelt scroll */
 }
 
-/* App- frame: nu altijd volledige hoogte, breedte schaalt mee */
+/* App-frame: nu altijd volledige breedte + hoogte van het scherm */
 #app {
   background: #ffffff;
-  border: 6px solid #222;
-  border-radius: 16px;
+  border: 0;           /* geen zwarte rand om het frame */
+  border-radius: 0;    /* geen afgeronde hoeken buiten beeld */
 
-  /* Gebruik volledige hoogte van het scherm */
+  width: 100vw;
   height: 100vh;
-
-  /* Breedte schaalt mee als telefoon-frame (ongeveer 9:16) */
-  width: min(100vw, 100vh * 9 / 16);
-  max-width: var(--app-max-width);
+  max-width: none;
 
   position: relative;
   padding: 16px;

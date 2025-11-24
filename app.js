@@ -658,15 +658,6 @@ function closeSlotCountOverlay() {
 
 /* ---- Helpers voor plaatsing ---- */
 
-function getRowIndex(slotIndex) {
-  return Math.floor(slotIndex / SLOTS_PER_ROW);
-}
-
-function getRowSlotIndices(rowIndex) {
-  const base = rowIndex * SLOTS_PER_ROW;
-  return [base, base + 1, base + 2].filter((i) => i < NUM_SLOTS);
-}
-
 /**
  * Geeft true terug als deze slot NIET gebruikt mag worden om pallets in te plaatsen.
  */
