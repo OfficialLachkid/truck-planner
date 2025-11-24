@@ -72,7 +72,6 @@ const slotCountIncrease = document.getElementById("slot-count-increase");
 const slotCountCancel = document.getElementById("slot-count-cancel");
 const slotCountConfirm = document.getElementById("slot-count-confirm");
 
-
 // Helpers datum
 
 function createDateByIndex(dayIndex) {
@@ -321,6 +320,52 @@ function showDetailView() {
   truckHeaderEl.classList.remove("hidden");
 }
 
+// Animatie helpers
+
+function playSwipeIn(element, direction) {
+  if (!element) return;
+  element.classList.remove("view-swipe-in-left", "view-swipe-in-right");
+  // Force reflow
+  void element.offsetWidth;
+  const cls = direction === "right" ? "view-swipe-in-right" : "view-swipe-in-left";
+  element.classList.add(cls);
+}
+
+function animateSlots(indices, className, duration = 400) {
+  if (!Array.isArray(indices)) return;
+  indices.forEach((idx) => {
+    const el = slotsGridEl.querySelector(`.slot[data-index="${idx}"]`);
+    if (!el) return;
+    el.classList.remove(className);
+    void el.offsetWidth;
+    el.classList.add(className);
+    setTimeout(() => {
+      el.classList.remove(className);
+    }, duration);
+  });
+}
+
+function triggerSlotMorphAnimation(slotIndex, fromShape, toShape) {
+  const el = slotsGridEl.querySelector(`.slot[data-index="${slotIndex}"]`);
+  if (!el) return;
+
+  let cls = null;
+  if (fromShape === "square" && toShape === "rect") {
+    cls = "slot-morph-square-to-rect";
+  } else if (fromShape === "rect" && toShape === "square") {
+    cls = "slot-morph-rect-to-square";
+  }
+
+  if (!cls) return;
+
+  el.classList.remove("slot-morph-square-to-rect", "slot-morph-rect-to-square");
+  void el.offsetWidth;
+  el.classList.add(cls);
+  setTimeout(() => {
+    el.classList.remove("slot-morph-square-to-rect", "slot-morph-rect-to-square");
+  }, 300);
+}
+
 function openTruckDetail(truckId) {
   state.selectedTruckId = truckId;
   state.selectedOrderId = null;
@@ -335,6 +380,9 @@ function openTruckDetail(truckId) {
   renderOrders(truck);
   updateTruckHeader();
   showDetailView();
+
+  const detailPageEl = document.querySelector(".detail-page");
+  playSwipeIn(detailPageEl, "left");
 }
 
 // Slots / orders renderen
@@ -446,10 +494,12 @@ function showOrderDetail(order) {
   });
 
   orderDetailOverlay.classList.remove("hidden");
+  orderDetailOverlay.classList.add("overlay-open");
 }
 
 function hideOrderDetail() {
   orderDetailOverlay.classList.add("hidden");
+  orderDetailOverlay.classList.remove("overlay-open");
   orderDetailMetaEl.innerHTML = "";
   orderDetailBodyEl.innerHTML = "";
 }
@@ -481,6 +531,7 @@ function buildRouteStops(truck) {
 
 function showMap() {
   mapOverlay.classList.remove("hidden");
+  mapOverlay.classList.add("overlay-open");
 
   if (!nlMap && typeof L !== "undefined") {
     nlMap = L.map("nl-map").setView([52.1, 5.3], 7);
@@ -594,6 +645,7 @@ function showMap() {
 
 function hideMap() {
   mapOverlay.classList.add("hidden");
+  mapOverlay.classList.remove("overlay-open");
 }
 
 /* ---- Slot-count overlay helpers ---- */
@@ -602,11 +654,15 @@ function openSlotCountOverlay(truckId, orderId, startSlotIndex) {
   state.pendingPlacement = { truckId, orderId, startSlotIndex };
   slotCountInput.value = "1";
   slotCountOverlay.classList.remove("hidden");
+  slotCountOverlay.classList.add("overlay-open");
 }
 
 function closeSlotCountOverlay() {
   state.pendingPlacement = null;
-  if (slotCountOverlay) slotCountOverlay.classList.add("hidden");
+  if (slotCountOverlay) {
+    slotCountOverlay.classList.add("hidden");
+    slotCountOverlay.classList.remove("overlay-open");
+  }
 }
 
 /* ---- Helpers voor plaatsing ---- */
@@ -619,9 +675,10 @@ function closeSlotCountOverlay() {
 function isDisabledForPlacement(truck, slotIndex) {
   const rowIndex = getRowIndex(slotIndex);
   const rowIndices = getRowSlotIndices(rowIndex);
-  const [leftIdx, midIdx, rightIdx] = rowIndices;
+  const [leftIdx, midIdx] = rowIndices;
 
   const left = truck.slots[leftIdx];
+  const rightIdx = rowIndices[2];
   const right = typeof rightIdx === "number" ? truck.slots[rightIdx] : null;
   const rowHasRect =
     (left && left.shape === "rect") || (right && right.shape === "rect");
@@ -737,8 +794,8 @@ function placeOrderInAdjacentSlots(truck, order, startIndex, count) {
 
 /**
  * Klik op een slot:
- * - Leeg, geen order geselecteerd -> vorm kiezen
- * - Gevuld, geen order -> order (deze slot) vrijmaken
+ * - Leeg, geen order geselecteerd -> vorm kiezen (met morph animatie)
+ * - Gevuld, geen order -> order (deze slot) vrijmaken (met animatie)
  * - Leeg, wel order geselecteerd -> vraag aantal pallets + plaats
  */
 function handleSlotClick(truck, slotIndex) {
@@ -747,27 +804,45 @@ function handleSlotClick(truck, slotIndex) {
 
   // CASE A: Leeg slot, geen geselecteerde order -> vorm kiezen
   if (currentOrderId === null && state.selectedOrderId === null) {
+    const prevShape = slot.shape;
     const makeRect = window.confirm(
       "Wil je deze slot rechthoekig maken?\n\nOK = Rechthoek\nAnnuleer = Vierkant"
     );
     const newShape = makeRect ? "rect" : "square";
+
     setSlotShape(truck, slotIndex, newShape);
     renderSlots(truck);
+
+    // Alleen morph als de vorm echt gewijzigd is
+    if (slot.shape !== prevShape) {
+      triggerSlotMorphAnimation(slotIndex, prevShape, slot.shape);
+    }
     return;
   }
 
-  // CASE B: Slot is gevuld en er is geen order geselecteerd -> slot leeg maken
+  // CASE B: Slot is gevuld en er is geen order geselecteerd -> slot leeg maken (met shrink/fade)
   if (currentOrderId !== null && state.selectedOrderId === null) {
-    const order = truck.orders.find((o) => o.id === currentOrderId);
-    if (order) {
-      order.occupiedSlots = (order.occupiedSlots || []).filter(
-        (idx) => idx !== slotIndex
-      );
-    }
-    slot.orderId = null;
+    const slotEl = slotsGridEl.querySelector(`.slot[data-index="${slotIndex}"]`);
 
-    renderSlots(truck);
-    renderOrders(truck);
+    const performRemoval = () => {
+      const order = truck.orders.find((o) => o.id === currentOrderId);
+      if (order) {
+        order.occupiedSlots = (order.occupiedSlots || []).filter(
+          (idx) => idx !== slotIndex
+        );
+      }
+      slot.orderId = null;
+
+      renderSlots(truck);
+      renderOrders(truck);
+    };
+
+    if (slotEl) {
+      slotEl.classList.add("slot-removing");
+      setTimeout(performRemoval, 180);
+    } else {
+      performRemoval();
+    }
     return;
   }
 
@@ -825,6 +900,8 @@ function goToPrevTruck() {
   const newIndex = (idx - 1 + day.trucks.length) % day.trucks.length;
   const newTruck = day.trucks[newIndex];
   openTruckDetail(newTruck.id);
+  const detailPageEl = document.querySelector(".detail-page");
+  playSwipeIn(detailPageEl, "right");
 }
 
 function goToNextTruck() {
@@ -837,6 +914,8 @@ function goToNextTruck() {
   const newIndex = (idx + 1) % day.trucks.length;
   const newTruck = day.trucks[newIndex];
   openTruckDetail(newTruck.id);
+  const detailPageEl = document.querySelector(".detail-page");
+  playSwipeIn(detailPageEl, "left");
 }
 
 function deleteCurrentTruck() {
@@ -879,6 +958,7 @@ prevDayBtn.addEventListener("click", () => {
   ensureDayExists(state.currentDayIndex);
   showListView();
   renderTruckList();
+  playSwipeIn(truckListView, "right");
 });
 
 nextDayBtn.addEventListener("click", () => {
@@ -888,6 +968,7 @@ nextDayBtn.addEventListener("click", () => {
   ensureDayExists(state.currentDayIndex);
   showListView();
   renderTruckList();
+  playSwipeIn(truckListView, "left");
 });
 
 addTruckBtn.addEventListener("click", () => {
@@ -976,6 +1057,7 @@ slotCountConfirm.addEventListener("click", () => {
     closeSlotCountOverlay();
     renderSlots(truck);
     renderOrders(truck);
+    animateSlots(order.occupiedSlots, "slot-placed", 450);
   }
 });
 

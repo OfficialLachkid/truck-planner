@@ -140,7 +140,7 @@ body {
   flex: 1 1 auto;
 }
 
-/* Kleine tekst "Vandaag / Morgen / Gisteren" */
+/* Kleine tekst "Vandaag", "Morgen", "Gisteren" */
 .day-context-label {
   font-size: 12px;
   font-weight: 500;
@@ -361,7 +361,7 @@ body {
 }
 
 .slot {
-  border-radius: 4px;
+  border-radius: 6px;
   background: #c7d0da;
   cursor: pointer;
   border: 1px solid #b7c0cc;
@@ -370,14 +370,21 @@ body {
   justify-content: center;
   font-size: 12px;
   min-height: var(--slot-size);
-  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  transition:
+    flex 0.26s cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-radius 0.26s cubic-bezier(0.22, 0.61, 0.36, 1),
+    background-color 0.24s ease-out,
+    transform 0.18s ease-out,
+    box-shadow 0.18s ease-out;
 }
 
 .slot.square {
   flex: 1;
+  border-radius: 6px;
 }
 .slot.rect {
   flex: 2;
+  border-radius: 10px;
 }
 
 .slot.empty {
@@ -441,17 +448,30 @@ body {
   box-shadow: 0 0 0 1px rgba(43, 168, 109, 0.4);
 }
 
-/* === OVERLAYS (order details + kaart) === */
+/* === OVERLAYS (order details + kaart + pallets) === */
 
 .order-detail-overlay,
-.map-overlay {
+.map-overlay,
+.slot-count-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.45);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 40;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease-out;
+}
+
+.order-detail-overlay.overlay-open,
+.map-overlay.overlay-open,
+.slot-count-overlay.overlay-open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .order-detail-card,
@@ -466,12 +486,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transform: translateY(12px);
+  opacity: 0;
+  transition: transform 0.25s ease-out, opacity 0.25s ease-out;
 }
 
 .order-detail-card h3,
 .map-card h3 {
   margin-bottom: 4px;
   font-size: 1.1rem;
+}
+
+.order-detail-overlay.overlay-open .order-detail-card,
+.map-overlay.overlay-open .map-card {
+  transform: translateY(0);
+  opacity: 1;
 }
 
 .order-detail-meta {
@@ -546,16 +575,6 @@ body {
 
 /* === OVERLAY: aantal pallets (slot count) === */
 
-.slot-count-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-}
-
 .slot-count-overlay.hidden {
   display: none !important;
 }
@@ -570,6 +589,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  transform: translateY(12px);
+  opacity: 0;
+  transition: transform 0.25s ease-out, opacity 0.25s ease-out;
+}
+
+.slot-count-overlay.overlay-open .slot-count-card {
+  transform: translateY(0);
+  opacity: 1;
 }
 
 .slot-count-title {
@@ -649,4 +676,94 @@ body {
 .slot-count-confirm {
   background: #10b981;
   color: #ffffff;
+}
+
+/* === Slot animaties === */
+
+.slot-placed {
+  animation: slotFadePulse 0.45s ease-out;
+}
+
+@keyframes slotFadePulse {
+  0% {
+    transform: scale(0.8);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  45% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.slot-removing {
+  animation: slotRemove 0.18s ease-in forwards;
+}
+
+@keyframes slotRemove {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+/* Apple-like morph tussen square ↔ rect */
+
+.slot-morph-square-to-rect,
+.slot-morph-rect-to-square {
+  animation: slotMorphApple 0.26s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes slotMorphApple {
+  0% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 rgba(15, 23, 42, 0);
+  }
+  40% {
+    transform: scale(1.02);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.28);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.18);
+  }
+}
+
+/* === View swipe animaties voor dag / truck wisselen === */
+
+@keyframes viewSwipeInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes viewSwipeInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.view-swipe-in-left {
+  animation: viewSwipeInLeft 0.28s ease-out;
+}
+
+.view-swipe-in-right {
+  animation: viewSwipeInRight 0.28s ease-out;
 }
