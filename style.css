@@ -301,18 +301,13 @@ body {
   gap: 8px;
 }
 
+/* BELANGRIJK: truck links + orders rechts ALTIJD naast elkaar */
 .detail-content {
-  display: grid;
-  grid-template-columns: 2fr 1.3fr;
+  display: grid !important;
+  grid-template-columns: 2fr 1.3fr !important;
   gap: 16px;
   flex: 1 1 auto;
   overflow: hidden;
-}
-
-@media (max-width: 600px) {
-  .detail-content {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Slots / truck links */
