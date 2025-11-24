@@ -1,6 +1,4 @@
-// app.js
-
-// Aantal vakken per vrachtwagen
+// Aantal vakken per vrachtwagen (per rit)
 const NUM_SLOTS = 33;
 const SLOTS_PER_ROW = 3;
 
@@ -26,8 +24,11 @@ const state = {
   days: {},
   selectedTruckId: null,
   selectedOrderId: null,
-  pendingPlacement: null, // {truckId, runId, startSlotIndex}
+  pendingPlacement: null, // {truckId, tripIndex, orderId, startSlotIndex}
 };
+
+// welke rit is actief in de kaart-overlay
+let activeMapTripIndex = 0;
 
 // DOM referenties
 const truckListView = document.getElementById("truck-list-view");
@@ -51,10 +52,12 @@ const deleteTruckBtn = document.getElementById("delete-truck-btn");
 const backToListBtn = document.getElementById("back-to-list-btn");
 const openMapBtn = document.getElementById("open-map-btn");
 
+// linker kolom (alle ritten van een truck komen hierin)
 const slotsContainerEl = document.querySelector(".slots-container");
+
 const ordersListEl = document.getElementById("orders-list");
 
-// overlay order detail
+// Order detail overlay
 const orderDetailOverlay = document.getElementById("order-detail-overlay");
 const orderDetailMetaEl = document.getElementById("order-detail-meta");
 const orderDetailBodyEl = document.getElementById("order-detail-body");
@@ -73,21 +76,6 @@ const slotCountDecrease = document.getElementById("slot-count-decrease");
 const slotCountIncrease = document.getElementById("slot-count-increase");
 const slotCountCancel = document.getElementById("slot-count-cancel");
 const slotCountConfirm = document.getElementById("slot-count-confirm");
-
-// In de HTML stond één truck-visual. We gebruiken die als template en
-// vervangen de inhoud door een eigen wrapper voor meerdere trucks (verticaal).
-let slotsRunsContainerEl = null;
-(function prepareSlotsLayout() {
-  const templateVisual = slotsContainerEl.querySelector(".truck-visual");
-  if (templateVisual) {
-    slotsContainerEl.removeChild(templateVisual);
-  }
-  const wrapper = document.createElement("div");
-  wrapper.id = "slots-runs-container";
-  wrapper.className = "slots-runs-container";
-  slotsContainerEl.appendChild(wrapper);
-  slotsRunsContainerEl = wrapper;
-})();
 
 // Helpers datum
 
@@ -138,12 +126,26 @@ function ensureDayExists(dayIndex) {
 
 let nextTruckId = 1;
 let nextOrderId = 1;
-let nextRunId = 1;
 
 function createInitialTrucks() {
   const trucks = [];
   trucks.push(createTruck("Truck 1"));
   return trucks;
+}
+
+// Helpers voor ritten/slots
+
+function createEmptySlots() {
+  return Array.from({ length: NUM_SLOTS }, () => ({
+    orderId: null,
+    shape: "square",
+  }));
+}
+
+function createEmptyTrip() {
+  return {
+    slots: createEmptySlots(),
+  };
 }
 
 // Dummy order-details met locatie + coördinaten
@@ -188,19 +190,6 @@ function createDummyOrderDetails(orderId, label, info) {
   };
 }
 
-function createRun(runIndex) {
-  const slots = Array.from({ length: NUM_SLOTS }, () => ({
-    orderId: null,
-    shape: "square",
-  }));
-
-  return {
-    id: nextRunId++,
-    name: runIndex === 0 ? "Voorkant" : `Voorkant – rit ${runIndex + 1}`,
-    slots,
-  };
-}
-
 function createTruck(name) {
   const truckId = nextTruckId++;
 
@@ -225,8 +214,8 @@ function createTruck(name) {
       label: tpl.label,
       info: tpl.info,
       truckId,
-      runId: null, // aan welke sub-truck gekoppeld
-      occupiedSlots: [], // indices binnen die run
+      tripIndex: null, // aan welke rit is deze order gekoppeld?
+      occupiedSlots: [], // indices binnen die rit
       createdAt: details.createdAt,
       postcode: details.postcode,
       location: details.location,
@@ -240,7 +229,7 @@ function createTruck(name) {
   return {
     id: truckId,
     name,
-    runs: [createRun(0)],
+    trips: [createEmptyTrip()], // minstens 1 rit
     orders,
   };
 }
@@ -258,10 +247,6 @@ function getTruckById(truckId) {
 function getTruckIndex(truckId) {
   const day = getCurrentDay();
   return day.trucks.findIndex((t) => t.id === truckId);
-}
-
-function getRunById(truck, runId) {
-  return truck.runs.find((r) => r.id === runId);
 }
 
 // Helpers rijen
@@ -293,9 +278,9 @@ function renderTruckList() {
     card.className = "truck-card";
     card.dataset.truckId = truck.id;
 
-    // truck is 'vol' als alle runs volledig gevuld zijn
-    const isFull = truck.runs.every((run) =>
-      run.slots.every((slot) => slot.orderId !== null)
+    // truck is "vol" als ALLE ritten vol zijn
+    const isFull = truck.trips.every((trip) =>
+      trip.slots.every((slot) => slot.orderId !== null)
     );
     if (isFull) {
       card.classList.add("truck-full");
@@ -360,17 +345,19 @@ function playSwipeIn(element, direction) {
   if (!element) return;
   element.classList.remove("view-swipe-in-left", "view-swipe-in-right");
   void element.offsetWidth;
-  const cls =
-    direction === "right" ? "view-swipe-in-right" : "view-swipe-in-left";
+  const cls = direction === "right" ? "view-swipe-in-right" : "view-swipe-in-left";
   element.classList.add(cls);
 }
 
-function animateSlots(runId, indices, className, duration = 400) {
-  if (!Array.isArray(indices) || !slotsRunsContainerEl) return;
+function animateSlots(tripIndex, indices, className, duration = 400) {
+  if (!Array.isArray(indices)) return;
+  const gridEl = slotsContainerEl.querySelector(
+    `.slots-grid[data-trip-index="${tripIndex}"]`
+  );
+  if (!gridEl) return;
+
   indices.forEach((idx) => {
-    const el = slotsRunsContainerEl.querySelector(
-      `.slot[data-run-id="${runId}"][data-index="${idx}"]`
-    );
+    const el = gridEl.querySelector(`.slot[data-index="${idx}"]`);
     if (!el) return;
     el.classList.remove(className);
     void el.offsetWidth;
@@ -381,11 +368,12 @@ function animateSlots(runId, indices, className, duration = 400) {
   });
 }
 
-function triggerSlotMorphAnimation(runId, slotIndex, fromShape, toShape) {
-  if (!slotsRunsContainerEl) return;
-  const el = slotsRunsContainerEl.querySelector(
-    `.slot[data-run-id="${runId}"][data-index="${slotIndex}"]`
+function triggerSlotMorphAnimation(tripIndex, slotIndex, fromShape, toShape) {
+  const gridEl = slotsContainerEl.querySelector(
+    `.slots-grid[data-trip-index="${tripIndex}"]`
   );
+  if (!gridEl) return;
+  const el = gridEl.querySelector(`.slot[data-index="${slotIndex}"]`);
   if (!el) return;
 
   let cls = null;
@@ -415,7 +403,7 @@ function openTruckDetail(truckId) {
   const truck = getTruckById(truckId);
   if (!truck) return;
 
-  renderSlots(truck);
+  renderTrips(truck);
   renderOrders(truck);
   updateTruckHeader();
   showDetailView();
@@ -424,109 +412,151 @@ function openTruckDetail(truckId) {
   playSwipeIn(detailPageEl, "left");
 }
 
-// Slots / orders renderen – MEERDERE TRUCKS VERTICAAL
+// Alle ritten (sub-vrachtwagens) renderen, verticaal onder elkaar
+function renderTrips(truck) {
+  if (!slotsContainerEl) return;
 
-function renderSlots(truck) {
-  if (!slotsRunsContainerEl) return;
-  slotsRunsContainerEl.innerHTML = "";
+  slotsContainerEl.innerHTML = "";
 
-  truck.runs.forEach((run, runIndex) => {
-    const runBlock = document.createElement("div");
-    runBlock.className = "truck-visual truck-run-block";
+  // Scrollcontainer + wrapper voor alle ritten
+  const scrollEl = document.createElement("div");
+  scrollEl.className = "truck-runs-scroll";
+
+  const wrapperEl = document.createElement("div");
+  wrapperEl.className = "truck-runs-wrapper";
+
+  truck.trips.forEach((trip, tripIndex) => {
+    const tripEl = document.createElement("div");
+    tripEl.className = "truck-run";
+
+    // Header met dak + label
+    const headerEl = document.createElement("div");
+    headerEl.className = "truck-run-header";
 
     const roof = document.createElement("div");
     roof.className = "detail-truck-roof";
-    runBlock.appendChild(roof);
 
     const frontLabel = document.createElement("div");
     frontLabel.className = "truck-label-front";
     frontLabel.textContent =
-      runIndex === 0 ? "Voorkant" : `Voorkant – rit ${runIndex + 1}`;
-    runBlock.appendChild(frontLabel);
+      tripIndex === 0 ? "Voorkant" : `Voorkant – rit ${tripIndex + 1}`;
 
-    const grid = document.createElement("div");
-    grid.className = "slots-grid";
-    grid.dataset.runId = run.id;
+    headerEl.appendChild(roof);
+    headerEl.appendChild(frontLabel);
 
-    const totalRows = Math.ceil(NUM_SLOTS / SLOTS_PER_ROW);
+    // Slots-grid voor deze rit
+    const gridEl = document.createElement("div");
+    gridEl.className = "slots-grid";
+    gridEl.dataset.tripIndex = String(tripIndex);
+    renderSlotsForTrip(truck, tripIndex, gridEl);
 
-    for (let row = 0; row < totalRows; row++) {
-      const rowDiv = document.createElement("div");
-      rowDiv.className = "slots-row";
-
-      const indices = getRowSlotIndices(row);
-      const [leftIdx, midIdx, rightIdx] = indices;
-
-      const left = run.slots[leftIdx];
-      const mid = midIdx !== undefined ? run.slots[midIdx] : null;
-      const right = rightIdx !== undefined ? run.slots[rightIdx] : null;
-
-      const rowHasRect =
-        (left && left.shape === "rect") || (right && right.shape === "rect");
-
-      const createSlotEl = (slotObj, idx) => {
-        const slotEl = document.createElement("div");
-        slotEl.classList.add(
-          "slot",
-          slotObj.shape === "rect" ? "rect" : "square"
-        );
-        slotEl.dataset.index = idx;
-        slotEl.dataset.runId = run.id;
-
-        if (slotObj.orderId === null) {
-          slotEl.classList.add("empty");
-        } else {
-          slotEl.classList.add("filled");
-          const order = truck.orders.find((o) => o.id === slotObj.orderId);
-          slotEl.textContent = order ? order.label.replace("Order ", "") : "?";
-        }
-
-        slotEl.addEventListener("click", () => {
-          handleSlotClick(truck, run, idx);
-        });
-
-        return slotEl;
-      };
-
-      if (left) rowDiv.appendChild(createSlotEl(left, leftIdx));
-      if (!rowHasRect && mid) rowDiv.appendChild(createSlotEl(mid, midIdx));
-      if (right) rowDiv.appendChild(createSlotEl(right, rightIdx));
-
-      grid.appendChild(rowDiv);
-    }
-
-    runBlock.appendChild(grid);
-
+    // Footer label
     const backLabel = document.createElement("div");
-    backLabel.className = "truck-label-back";
+    backLabel.className = "truck-run-footer";
     backLabel.textContent = "Achterkant";
-    runBlock.appendChild(backLabel);
 
-    slotsRunsContainerEl.appendChild(runBlock);
+    tripEl.appendChild(headerEl);
+    tripEl.appendChild(gridEl);
+    tripEl.appendChild(backLabel);
+
+    wrapperEl.appendChild(tripEl);
   });
 
-  // + Truck knop ONDER alle trucks
-  const addBtnWrapper = document.createElement("div");
-  addBtnWrapper.className = "add-capacity-wrapper";
+  scrollEl.appendChild(wrapperEl);
+  slotsContainerEl.appendChild(scrollEl);
 
+  // + Truck knop onder alle ritten
   const addBtn = document.createElement("button");
-  addBtn.type = "button";
-  addBtn.className = "add-capacity-btn";
+  addBtn.id = "add-capacity-btn";
   addBtn.textContent = "+ Truck";
+  addBtn.className = "add-capacity-btn";
 
   addBtn.addEventListener("click", () => {
-    addExtraRunForTruck(truck.id);
+    addTripForSelectedTruck();
   });
 
-  addBtnWrapper.appendChild(addBtn);
-  slotsRunsContainerEl.appendChild(addBtnWrapper);
+  slotsContainerEl.appendChild(addBtn);
+
+  // Zorg dat we altijd vanaf de bovenkant kunnen scrollen
+  scrollEl.scrollTop = Math.min(scrollEl.scrollTop, scrollEl.scrollHeight);
+}
+
+// Een rit toevoegen aan de geselecteerde truck
+function addTripForSelectedTruck() {
+  const truck = getTruckById(state.selectedTruckId);
+  if (!truck) return;
+
+  truck.trips.push(createEmptyTrip());
+  renderTrips(truck);
+
+  const scrollEl = slotsContainerEl.querySelector(".truck-runs-scroll");
+  const runs = scrollEl ? scrollEl.querySelectorAll(".truck-run") : [];
+  if (scrollEl && runs.length) {
+    const last = runs[runs.length - 1];
+    scrollEl.scrollTo({
+      top: last.offsetTop,
+      behavior: "smooth",
+    });
+  }
+}
+
+// Slots / orders renderen per rit
+
+function renderSlotsForTrip(truck, tripIndex, gridEl) {
+  gridEl.innerHTML = "";
+
+  const trip = truck.trips[tripIndex];
+  const totalRows = Math.ceil(NUM_SLOTS / SLOTS_PER_ROW);
+
+  for (let row = 0; row < totalRows; row++) {
+    const rowDiv = document.createElement("div");
+    rowDiv.className = "slots-row";
+
+    const indices = getRowSlotIndices(row);
+    const [leftIdx, midIdx, rightIdx] = indices;
+
+    const left = trip.slots[leftIdx];
+    const mid = midIdx !== undefined ? trip.slots[midIdx] : null;
+    const right = rightIdx !== undefined ? trip.slots[rightIdx] : null;
+
+    const rowHasRect =
+      (left && left.shape === "rect") || (right && right.shape === "rect");
+
+    const createSlotEl = (slotObj, idx) => {
+      const slotEl = document.createElement("div");
+      slotEl.classList.add("slot", slotObj.shape === "rect" ? "rect" : "square");
+      slotEl.dataset.index = idx;
+
+      if (slotObj.orderId === null) {
+        slotEl.classList.add("empty");
+      } else {
+        slotEl.classList.add("filled");
+        const order = truck.orders.find((o) => o.id === slotObj.orderId);
+        slotEl.textContent = order ? order.label.replace("Order ", "") : "?";
+      }
+
+      slotEl.addEventListener("click", () => {
+        handleSlotClick(truck, tripIndex, idx);
+      });
+
+      return slotEl;
+    };
+
+    if (left) rowDiv.appendChild(createSlotEl(left, leftIdx));
+    if (!rowHasRect && mid) rowDiv.appendChild(createSlotEl(mid, midIdx));
+    if (right) rowDiv.appendChild(createSlotEl(right, rightIdx));
+
+    gridEl.appendChild(rowDiv);
+  }
 }
 
 function renderOrders(truck) {
   ordersListEl.innerHTML = "";
 
+  // Alleen orders die nog niet aan een rit gekoppeld zijn
   const availableOrders = truck.orders.filter(
-    (o) => !o.occupiedSlots || o.occupiedSlots.length === 0
+    (o) =>
+      (o.tripIndex === null || o.occupiedSlots.length === 0)
   );
 
   if (availableOrders.length === 0) {
@@ -594,13 +624,13 @@ function hideOrderDetail() {
 
 // Kaart helpers / routeplanning
 
-function buildRouteStops(truck) {
+function buildRouteStops(truck, tripIndex) {
   const loaded = truck.orders
     .filter(
       (o) =>
+        o.tripIndex === tripIndex &&
         o.occupiedSlots &&
-        o.occupiedSlots.length > 0 &&
-        typeof o.runId === "number"
+        o.occupiedSlots.length > 0
     )
     .map((o) => {
       const deepestSlot = Math.max(...o.occupiedSlots);
@@ -620,10 +650,7 @@ function buildRouteStops(truck) {
   return loaded;
 }
 
-function showMap() {
-  mapOverlay.classList.remove("hidden");
-  mapOverlay.classList.add("overlay-open");
-
+function ensureMapInstance() {
   if (!nlMap && typeof L !== "undefined") {
     nlMap = L.map("nl-map").setView([52.1, 5.3], 7);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -640,16 +667,34 @@ function showMap() {
   }
 
   setTimeout(() => nlMap.invalidateSize(), 80);
+}
 
-  const truck = getTruckById(state.selectedTruckId);
-  if (!truck) {
-    nlMap.setView([52.1, 5.3], 7);
-    return;
-  }
+// Teken route voor 1 specifieke rit
+function renderTripOnMap(truck, tripIndex) {
+  if (!nlMap || !routeLayer) return;
 
-  const routeStops = buildRouteStops(truck);
+  routeLayer.clearLayers();
+
+  const routeStops = buildRouteStops(truck, tripIndex);
+
+  const points = [];
+  const startLatLng = [START_LOCATION.lat, START_LOCATION.lng];
+
+  const homeIcon = L.divIcon({
+    className: "route-marker",
+    html: `<div class="route-marker-inner home">🏠</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+
+  const startMarker = L.marker(startLatLng, { icon: homeIcon }).bindPopup(
+    START_LOCATION.label
+  );
+  routeLayer.addLayer(startMarker);
+  points.push(startLatLng);
 
   const markerGroups = new Map();
+
   routeStops.forEach((stop, index) => {
     const key = `${stop.lat.toFixed(5)},${stop.lng.toFixed(5)}`;
     let group = markerGroups.get(key);
@@ -668,22 +713,6 @@ function showMap() {
       palletCount: stop.palletCount,
     });
   });
-
-  const points = [];
-  const startLatLng = [START_LOCATION.lat, START_LOCATION.lng];
-
-  const homeIcon = L.divIcon({
-    className: "route-marker",
-    html: `<div class="route-marker-inner home">🏠</div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
-  });
-
-  const startMarker = L.marker(startLatLng, { icon: homeIcon }).bindPopup(
-    START_LOCATION.label
-  );
-  routeLayer.addLayer(startMarker);
-  points.push(startLatLng);
 
   const seenPointKeys = new Set();
   routeStops.forEach((stop) => {
@@ -728,6 +757,91 @@ function showMap() {
   }
 }
 
+// kies default rit voor kaart (eerste met geplande orders, anders 0)
+function getDefaultMapTripIndex(truck) {
+  const idxWithOrders = truck.trips.findIndex((_, tripIndex) =>
+    truck.orders.some(
+      (o) =>
+        o.tripIndex === tripIndex &&
+        o.occupiedSlots &&
+        o.occupiedSlots.length > 0
+    )
+  );
+  return idxWithOrders !== -1 ? idxWithOrders : 0;
+}
+
+function showMap() {
+  const truck = getTruckById(state.selectedTruckId);
+  if (!truck) return;
+
+  mapOverlay.classList.remove("hidden");
+  mapOverlay.classList.add("overlay-open");
+
+  ensureMapInstance();
+  if (!nlMap || !routeLayer) return;
+
+  // Tabs-container direct achter de titel plaatsen (eenmalig aanmaken)
+  let tabsContainer = document.getElementById("map-trip-tabs");
+  if (!tabsContainer) {
+    const mapCard = document.querySelector(".map-card");
+    const titleEl = mapCard.querySelector("h3");
+    tabsContainer = document.createElement("div");
+    tabsContainer.id = "map-trip-tabs";
+    tabsContainer.className = "map-trip-tabs";
+    // simpele styling (inline)
+    tabsContainer.style.display = "flex";
+    tabsContainer.style.gap = "6px";
+    tabsContainer.style.margin = "8px 0 6px";
+    titleEl.insertAdjacentElement("afterend", tabsContainer);
+  }
+
+  tabsContainer.innerHTML = "";
+
+  if (
+    typeof activeMapTripIndex !== "number" ||
+    activeMapTripIndex >= truck.trips.length
+  ) {
+    activeMapTripIndex = getDefaultMapTripIndex(truck);
+  }
+
+  // Tabs opbouwen: [Rit 1] [Rit 2] ...
+  truck.trips.forEach((_, tripIndex) => {
+    const btn = document.createElement("button");
+    btn.className = "map-trip-tab";
+    btn.dataset.tripIndex = String(tripIndex);
+    btn.textContent = `Rit ${tripIndex + 1}`;
+
+    // basis styling voor segmented feel
+    btn.style.flex = "1";
+    btn.style.padding = "6px 8px";
+    btn.style.borderRadius = "999px";
+    btn.style.border = "1px solid #d1d5db";
+    btn.style.background =
+      tripIndex === activeMapTripIndex ? "#111827" : "#f9fafb";
+    btn.style.color = tripIndex === activeMapTripIndex ? "#ffffff" : "#111827";
+    btn.style.fontSize = "0.8rem";
+    btn.style.cursor = "pointer";
+
+    btn.addEventListener("click", () => {
+      activeMapTripIndex = tripIndex;
+      // actieve style updaten
+      Array.from(tabsContainer.querySelectorAll(".map-trip-tab")).forEach(
+        (other) => {
+          const tIdx = Number(other.dataset.tripIndex || "0");
+          const isActive = tIdx === activeMapTripIndex;
+          other.style.background = isActive ? "#111827" : "#f9fafb";
+          other.style.color = isActive ? "#ffffff" : "#111827";
+        }
+      );
+      renderTripOnMap(truck, activeMapTripIndex);
+    });
+
+    tabsContainer.appendChild(btn);
+  });
+
+  renderTripOnMap(truck, activeMapTripIndex);
+}
+
 function hideMap() {
   mapOverlay.classList.add("hidden");
   mapOverlay.classList.remove("overlay-open");
@@ -735,8 +849,8 @@ function hideMap() {
 
 /* ---- Slot-count overlay helpers ---- */
 
-function openSlotCountOverlay(truckId, runId, startSlotIndex) {
-  state.pendingPlacement = { truckId, runId, startSlotIndex };
+function openSlotCountOverlay(truckId, tripIndex, orderId, startSlotIndex) {
+  state.pendingPlacement = { truckId, tripIndex, orderId, startSlotIndex };
   slotCountInput.value = "1";
   slotCountOverlay.classList.remove("hidden");
   slotCountOverlay.classList.add("overlay-open");
@@ -755,14 +869,15 @@ function closeSlotCountOverlay() {
 /**
  * Geeft true terug als deze slot NIET gebruikt mag worden om pallets in te plaatsen.
  */
-function isDisabledForPlacement(run, slotIndex) {
+function isDisabledForPlacement(truck, tripIndex, slotIndex) {
+  const trip = truck.trips[tripIndex];
   const rowIndex = getRowIndex(slotIndex);
   const rowIndices = getRowSlotIndices(rowIndex);
   const [leftIdx, midIdx] = rowIndices;
 
-  const left = run.slots[leftIdx];
+  const left = trip.slots[leftIdx];
   const rightIdx = rowIndices[2];
-  const right = typeof rightIdx === "number" ? run.slots[rightIdx] : null;
+  const right = typeof rightIdx === "number" ? trip.slots[rightIdx] : null;
   const rowHasRect =
     (left && left.shape === "rect") || (right && right.shape === "rect");
 
@@ -779,7 +894,9 @@ function handleOrderClick(orderId) {
   if (!clickedOrder) return;
 
   const isFree =
-    !clickedOrder.occupiedSlots || clickedOrder.occupiedSlots.length === 0;
+    clickedOrder.tripIndex === null ||
+    !clickedOrder.occupiedSlots ||
+    clickedOrder.occupiedSlots.length === 0;
 
   if (state.selectedOrderId === orderId) {
     if (isFree) {
@@ -793,17 +910,23 @@ function handleOrderClick(orderId) {
   closeSlotCountOverlay();
 
   renderOrders(truck);
-  renderSlots(truck);
+  renderTrips(truck);
 }
 
 /**
  * Check of er in deze rij nog een slot bij kan,
  * rekening houdend met reeds geplande (nog te plaatsen) indices.
  */
-function canPlaceOrderInRowWithPlanned(run, targetSlotIndex, plannedIndices) {
+function canPlaceOrderInRowWithPlanned(
+  truck,
+  tripIndex,
+  targetSlotIndex,
+  plannedIndices
+) {
+  const trip = truck.trips[tripIndex];
   const rowIndex = getRowIndex(targetSlotIndex);
   const rowIndices = getRowSlotIndices(rowIndex);
-  const rowSlots = rowIndices.map((i) => run.slots[i]);
+  const rowSlots = rowIndices.map((i) => trip.slots[i]);
 
   const hasRect = rowSlots.some((s) => s && s.shape === "rect");
   const occupiedCount = rowSlots.filter((s) => s && s.orderId !== null).length;
@@ -822,26 +945,35 @@ function canPlaceOrderInRowWithPlanned(run, targetSlotIndex, plannedIndices) {
 }
 
 /**
- * Plaats een order in N aaneengesloten lege slots vanaf startIndex IN ÉÉN RUN.
+ * Plaats een order in N aaneengesloten lege slots vanaf startIndex (in 1 rit).
  */
-function placeOrderInAdjacentSlots(truck, run, order, startIndex, count) {
+function placeOrderInAdjacentSlots(truck, tripIndex, order, startIndex, count) {
   if (count < 1) return false;
 
+  const trip = truck.trips[tripIndex];
   const candidateIndices = [];
   let idx = startIndex;
 
   while (candidateIndices.length < count && idx < NUM_SLOTS) {
-    if (isDisabledForPlacement(run, idx)) {
+    if (isDisabledForPlacement(truck, tripIndex, idx)) {
       idx++;
       continue;
     }
 
-    const slot = run.slots[idx];
+    const slot = trip.slots[idx];
     if (!slot) break;
 
     if (slot.orderId !== null) break;
 
-    if (!canPlaceOrderInRowWithPlanned(run, idx, candidateIndices)) break;
+    if (
+      !canPlaceOrderInRowWithPlanned(
+        truck,
+        tripIndex,
+        idx,
+        candidateIndices
+      )
+    )
+      break;
 
     candidateIndices.push(idx);
     idx++;
@@ -856,23 +988,24 @@ function placeOrderInAdjacentSlots(truck, run, order, startIndex, count) {
   }
 
   candidateIndices.forEach((slotIndex) => {
-    run.slots[slotIndex].orderId = order.id;
+    trip.slots[slotIndex].orderId = order.id;
   });
 
-  order.runId = run.id;
+  order.tripIndex = tripIndex;
   order.occupiedSlots = [...candidateIndices];
   state.selectedOrderId = null;
   return true;
 }
 
 /**
- * Klik op een slot.
+ * Klik op een slot in een bepaalde rit.
  */
-function handleSlotClick(truck, run, slotIndex) {
-  const slot = run.slots[slotIndex];
+function handleSlotClick(truck, tripIndex, slotIndex) {
+  const trip = truck.trips[tripIndex];
+  const slot = trip.slots[slotIndex];
   const currentOrderId = slot.orderId;
 
-  // geen order geselecteerd & leeg vak -> vorm togglen
+  // Geen order geselecteerd + leeg slot -> vorm wisselen
   if (currentOrderId === null && state.selectedOrderId === null) {
     const prevShape = slot.shape;
     const makeRect = window.confirm(
@@ -880,35 +1013,37 @@ function handleSlotClick(truck, run, slotIndex) {
     );
     const newShape = makeRect ? "rect" : "square";
 
-    setSlotShape(run, slotIndex, newShape);
-    renderSlots(truck);
+    setSlotShape(truck, tripIndex, slotIndex, newShape);
+    renderTrips(truck);
 
     if (slot.shape !== prevShape) {
-      triggerSlotMorphAnimation(run.id, slotIndex, prevShape, slot.shape);
+      triggerSlotMorphAnimation(tripIndex, slotIndex, prevShape, slot.shape);
     }
     return;
   }
 
-  // gevuld vak, geen order geselecteerd -> volledige order uit deze run halen
+  // Gevulde slot + geen order geselecteerd -> order verwijderen
   if (currentOrderId !== null && state.selectedOrderId === null) {
-    const slotEl = slotsRunsContainerEl.querySelector(
-      `.slot[data-run-id="${run.id}"][data-index="${slotIndex}"]`
+    const gridEl = slotsContainerEl.querySelector(
+      `.slots-grid[data-trip-index="${tripIndex}"]`
     );
+    const slotEl = gridEl
+      ? gridEl.querySelector(`.slot[data-index="${slotIndex}"]`)
+      : null;
 
     const performRemoval = () => {
       const order = truck.orders.find((o) => o.id === currentOrderId);
-      if (order && order.runId === run.id) {
-        // alle pallets van deze order uit deze run halen
-        (order.occupiedSlots || []).forEach((idx) => {
-          if (run.slots[idx] && run.slots[idx].orderId === order.id) {
-            run.slots[idx].orderId = null;
-          }
-        });
-        order.occupiedSlots = [];
-        order.runId = null;
+      if (order) {
+        order.occupiedSlots = (order.occupiedSlots || []).filter(
+          (idx) => idx !== slotIndex
+        );
+        if (!order.occupiedSlots.length) {
+          order.tripIndex = null;
+        }
       }
+      slot.orderId = null;
 
-      renderSlots(truck);
+      renderTrips(truck);
       renderOrders(truck);
     };
 
@@ -921,9 +1056,9 @@ function handleSlotClick(truck, run, slotIndex) {
     return;
   }
 
-  // leeg vak + order geselecteerd -> plaats via pallet-overlay
+  // Leeg slot + een order geselecteerd -> plaatsing overlay
   if (currentOrderId === null && state.selectedOrderId !== null) {
-    openSlotCountOverlay(truck.id, run.id, slotIndex);
+    openSlotCountOverlay(truck.id, tripIndex, state.selectedOrderId, slotIndex);
     return;
   }
 
@@ -931,8 +1066,9 @@ function handleSlotClick(truck, run, slotIndex) {
 }
 
 // Vorm van slot aanpassen (vierkant/rechthoek)
-function setSlotShape(run, slotIndex, newShape) {
-  const slot = run.slots[slotIndex];
+function setSlotShape(truck, tripIndex, slotIndex, newShape) {
+  const trip = truck.trips[tripIndex];
+  const slot = trip.slots[slotIndex];
   if (!slot || slot.shape === newShape) return;
 
   const rowIndex = getRowIndex(slotIndex);
@@ -949,7 +1085,7 @@ function setSlotShape(run, slotIndex, newShape) {
     }
 
     if (midIdx !== undefined) {
-      const midSlot = run.slots[midIdx];
+      const midSlot = trip.slots[midIdx];
       if (midSlot && midSlot.orderId !== null) {
         alert(
           "Het middelste vak in deze rij is gevuld. Maak dit vak eerst leeg voordat je een rechthoekige positie gebruikt."
@@ -1021,17 +1157,6 @@ function deleteCurrentTruck() {
     openTruckDetail(newTruck.id);
     renderTruckList();
   }
-}
-
-// NIEUW: extra truck (rit) ONDER huidige truck (zelfde dag)
-function addExtraRunForTruck(truckId) {
-  const truck = getTruckById(truckId);
-  if (!truck) return;
-
-  const newRun = createRun(truck.runs.length);
-  truck.runs.push(newRun);
-
-  renderSlots(truck);
 }
 
 // Event listeners
@@ -1125,18 +1250,13 @@ slotCountConfirm.addEventListener("click", () => {
   const count = parseInt(slotCountInput.value || "1", 10);
   const validCount = Number.isNaN(count) ? 1 : Math.max(1, count);
 
-  const { truckId, runId, startSlotIndex } = state.pendingPlacement;
+  const { truckId, tripIndex, orderId, startSlotIndex } = state.pendingPlacement;
   const truck = getTruckById(truckId);
   if (!truck) {
     closeSlotCountOverlay();
     return;
   }
-  const run = getRunById(truck, runId);
-  if (!run) {
-    closeSlotCountOverlay();
-    return;
-  }
-  const order = truck.orders.find((o) => o.id === state.selectedOrderId);
+  const order = truck.orders.find((o) => o.id === orderId);
   if (!order) {
     closeSlotCountOverlay();
     return;
@@ -1144,16 +1264,16 @@ slotCountConfirm.addEventListener("click", () => {
 
   const ok = placeOrderInAdjacentSlots(
     truck,
-    run,
+    tripIndex,
     order,
     startSlotIndex,
     validCount
   );
   if (ok) {
     closeSlotCountOverlay();
-    renderSlots(truck);
+    renderTrips(truck);
     renderOrders(truck);
-    animateSlots(run.id, order.occupiedSlots, "slot-placed", 450);
+    animateSlots(tripIndex, order.occupiedSlots, "slot-placed", 450);
   }
 });
 

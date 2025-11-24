@@ -310,12 +310,13 @@ body {
 
 /* Slots / truck links */
 
+/* BASIS: container links naast orders */
 .slots-container {
   display: flex;
-  justify-content: center;
-  align-items: stretch;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  flex-direction: column;
+  align-items: center;   /* horizontaal centreren van ritten */
+  flex: 1 1 auto;
+  overflow: hidden;      /* scroll gebeurt in .truck-runs-scroll */
 }
 
 .truck-visual {
@@ -790,4 +791,70 @@ body {
 
 .view-swipe-in-right {
   animation: viewSwipeInRight 0.28s ease-out;
+}
+
+/* ==== MEERDERE RITTEN IN DETAIL VIEW ==== */
+
+/* Scrollbare zone waar alle ritten onder elkaar in staan */
+.truck-runs-scroll {
+  width: 100%;
+  flex: 1 1 auto;
+  overflow-y: auto;      /* ritten onder elkaar scrollen */
+  overflow-x: hidden;
+}
+
+/* De daadwerkelijke "verticale layout group" met ritten */
+.truck-runs-wrapper {
+  display: flex;
+  flex-direction: column;  /* onder elkaar */
+  align-items: center;
+  gap: 24px;               /* ruimte tussen ritten */
+  padding-bottom: 16px;
+}
+
+/* Eén rit (truck) */
+.truck-run {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* De kop (geel blok + tekst "Voorkant – rit X") blijft gecentreerd */
+.truck-run-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+/* Slots-grid per rit past zich netjes aan de breedte aan */
+.truck-run .slots-grid {
+  width: clamp(140px, 55vw, 220px);
+}
+
+/* Label "Achterkant" onder elke rit */
+.truck-run-footer {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #555;
+}
+
+/* + Truck knop heeft dezelfde breedte als de ritten */
+.add-capacity-btn {
+  margin-top: 12px;
+  width: clamp(140px, 55vw, 220px); /* zelfde breedte als slots-grid */
+  padding: 10px 0;
+  border-radius: 14px;
+  border: none;
+  background: #10b981;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: block;
+}
+
+.add-capacity-btn:hover {
+  filter: brightness(0.95);
 }
