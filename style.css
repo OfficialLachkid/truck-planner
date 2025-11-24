@@ -332,7 +332,7 @@ body {
   height: clamp(42px, 8vw, 60px);
   border-radius: 12px 12px 6px 6px;
   background: #f6b21a;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.25);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.25);
 }
 
 .truck-label-front,
@@ -438,7 +438,7 @@ body {
 
 .order-item.selected {
   border-color: #2ba86d;
-  box-shadow: 0 0 0 1px rgba(43,168,109,0.4);
+  box-shadow: 0 0 0 1px rgba(43, 168, 109, 0.4);
 }
 
 /* === OVERLAYS (order details + kaart) === */
@@ -521,4 +521,132 @@ body {
   .map-container {
     height: 260px;
   }
+}
+
+/* Marker-stijlen voor route (Leaflet divIcon) */
+.route-marker-inner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  border: 2px solid #1e40af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+.route-marker-inner.home {
+  background: #10b981;
+  border-color: #047857;
+}
+
+/* === OVERLAY: aantal pallets (slot count) === */
+
+.slot-count-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.slot-count-overlay.hidden {
+  display: none !important;
+}
+
+.slot-count-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 16px 18px 14px;
+  width: 86%;
+  max-width: 420px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.slot-count-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.slot-count-sub {
+  font-size: 0.82rem;
+  color: #4b5563;
+}
+
+.slot-count-input-row {
+  display: flex;
+  align-items: stretch;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.slot-count-step {
+  width: 56px;
+  border: none;
+  background: #f9fafb;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.slot-count-step:active {
+  background: #e5e7eb;
+}
+
+#slot-count-input {
+  flex: 1;
+  border: none;
+  border-inline: 1px solid #e5e7eb;
+  text-align: center;
+  font-size: 20px;
+  padding: 6px 0;
+  outline: none;
+}
+
+#slot-count-input::-webkit-outer-spin-button,
+#slot-count-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+#slot-count-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.slot-count-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.slot-count-cancel,
+.slot-count-confirm {
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.9rem;
+  border: none;
+  cursor: pointer;
+}
+
+.slot-count-cancel {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.slot-count-confirm {
+  background: #10b981;
+  color: #ffffff;
 }

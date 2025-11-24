@@ -1,27 +1,29 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Truck Planner Demo</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css" />
 
-  <link rel="stylesheet" href="style.css">
-  <!-- Leaflet CSS voor kaart -->
+  <!-- Leaflet CSS (kaart) -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
   />
 </head>
 <body>
   <div id="app">
-
     <!-- HEADER VOOR DAG-NAVIGATIE (alleen in lijst-view zichtbaar) -->
     <header id="day-header" class="top-bar">
       <button id="prev-day-btn" class="nav-btn"></button>
+
       <div class="day-label-wrapper">
-        <div id="day-context-label" class="day-context-label">Vandaag</div>
+        <div id="day-context-label" class="day-context-label"></div>
         <div id="day-label" class="day-label">20-11-2025</div>
       </div>
+
       <button id="next-day-btn" class="nav-btn"></button>
     </header>
 
@@ -37,22 +39,23 @@
     <main id="truck-list-view" class="view active-view">
       <div class="truck-list-container">
         <div id="truck-list" class="truck-list">
-          <!-- trucks via JS -->
+          <!-- Trucks worden via JS toegevoegd -->
           <button id="add-truck-btn" class="add-truck-btn">+</button>
         </div>
       </div>
     </main>
 
-    <!-- VIEW 2: Vrachtwagen detail (slots + orders) -->
+    <!-- VIEW 2: Vrachtwagen detail (truck + slots + orders) -->
     <main id="truck-detail-view" class="view">
       <div class="detail-page">
         <header class="detail-header">
           <div class="detail-header-left">
-            <button id="back-to-list-btn" class="nav-btn">&larr; Terug</button>
+            <button id="back-to-list-btn" class="nav-btn">← Terug</button>
           </div>
           <div class="detail-header-right">
-            <!-- Kaartknop staat alleen op dit scherm -->
-            <button id="open-map-btn" class="nav-btn map-btn">🗺️ Kaart</button>
+            <button id="open-map-btn" class="nav-btn map-btn">
+              🗺️ Kaart
+            </button>
           </div>
         </header>
 
@@ -63,7 +66,7 @@
               <div class="detail-truck-roof"></div>
               <div class="truck-label-front">Voorkant</div>
               <div id="slots-grid" class="slots-grid">
-                <!-- 33 slots via JS -->
+                <!-- Slots via JS -->
               </div>
               <div class="truck-label-back">Achterkant</div>
             </div>
@@ -73,10 +76,12 @@
           <aside class="orders-panel">
             <h3>Beschikbare orders</h3>
             <p class="orders-hint">
-              Klik een order en daarna een leeg vak.<br>
-              Klik op een gevuld vak om de order terug te zetten.<br>
-              Klik op een leeg vak zonder order om de vorm (vierkant/rechthoek) te kiezen.<br>
-              Klik twee keer op dezelfde vrije order om details (tabel) te bekijken.
+              Klik een order en daarna een leeg vak.<br />
+              Klik op een gevuld vak om de order terug te zetten.<br />
+              Klik op een leeg vak zonder order om de vorm (vierkant/rechthoek)
+              te kiezen.<br />
+              Klik twee keer op dezelfde vrije order om details (tabel) te
+              bekijken.
             </p>
             <ul id="orders-list" class="orders-list">
               <!-- orders via JS -->
@@ -84,20 +89,15 @@
           </aside>
         </section>
       </div>
+    </main>
 
-      <!-- ORDER DETAIL OVERLAY -->
-      <div
-        id="order-detail-overlay"
-        class="order-detail-overlay hidden"
-        style="display:none;"
-      >
-        <div class="order-detail-card">
-          <h3>Order details</h3>
+    <!-- OVERLAY: Order details (tabel) -->
+    <div id="order-detail-overlay" class="order-detail-overlay hidden">
+      <div class="order-detail-card">
+        <h3>Order details</h3>
+        <div id="order-detail-meta" class="order-detail-meta"></div>
 
-          <div id="order-detail-meta" class="order-detail-meta">
-            <!-- meta info via JS -->
-          </div>
-
+        <div class="order-detail-table-wrapper">
           <table class="order-detail-table">
             <thead>
               <tr>
@@ -107,38 +107,92 @@
                 <th>Pallets</th>
               </tr>
             </thead>
-            <tbody id="order-detail-body">
-              <!-- rows via JS -->
-            </tbody>
+            <tbody id="order-detail-body"></tbody>
           </table>
+        </div>
 
-          <button id="order-detail-close" class="nav-btn order-detail-close-btn">
-            Sluit
+        <button
+          id="order-detail-close"
+          class="nav-btn order-detail-close-btn"
+        >
+          Sluit
+        </button>
+      </div>
+    </div>
+
+    <!-- OVERLAY: Kaart -->
+    <div id="map-overlay" class="map-overlay hidden">
+      <div class="map-card">
+        <h3>Kaart – Nederland</h3>
+        <div class="map-container">
+          <div id="nl-map" style="width: 100%; height: 100%"></div>
+        </div>
+        <button id="map-close-btn" class="nav-btn order-detail-close-btn">
+          Sluit
+        </button>
+      </div>
+    </div>
+
+    <!-- OVERLAY: Aantal pallet-plekken voor order -->
+    <div id="slot-count-overlay" class="slot-count-overlay hidden">
+      <div class="slot-count-card">
+        <div class="slot-count-title">Aantal pallets</div>
+        <div class="slot-count-sub">
+          Kies hoeveel pallet-plekken deze order moet innemen (aaneengesloten
+          vakken vanaf de gekozen positie).
+        </div>
+
+        <div class="slot-count-input-row">
+          <button
+            id="slot-count-decrease"
+            class="slot-count-step"
+            type="button"
+          >
+            −
+          </button>
+          <input
+            id="slot-count-input"
+            type="number"
+            min="1"
+            value="1"
+            inputmode="numeric"
+          />
+          <button
+            id="slot-count-increase"
+            class="slot-count-step"
+            type="button"
+          >
+            +
+          </button>
+        </div>
+
+        <div class="slot-count-actions">
+          <button
+            id="slot-count-cancel"
+            class="slot-count-cancel"
+            type="button"
+          >
+            Annuleer
+          </button>
+          <button
+            id="slot-count-confirm"
+            class="slot-count-confirm"
+            type="button"
+          >
+            Bevestig
           </button>
         </div>
       </div>
-
-      <!-- KAART-OVERLAY -->
-      <div
-        id="map-overlay"
-        class="map-overlay hidden"
-        style="display:none;"
-      >
-        <div class="map-card">
-          <h3>Kaart – Nederland</h3>
-          <div id="nl-map" class="map-container"></div>
-          <button id="map-close-btn" class="nav-btn order-detail-close-btn">
-            Sluit
-          </button>
-        </div>
-      </div>
-
-    </main>
-
+    </div>
   </div>
 
-  <!-- Leaflet JS voor kaart -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
   <script src="app.js"></script>
 </body>
 </html>
