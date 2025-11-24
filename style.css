@@ -24,14 +24,15 @@ body {
   overflow: hidden; /* app zelf regelt scroll */
 }
 
-/* App-frame: nu altijd volledige breedte + hoogte van het scherm */
+/* App-frame: nu altijd volledige breedte + hoogte van het zichtbare scherm */
 #app {
   background: #ffffff;
-  border: 0;           /* geen zwarte rand om het frame */
-  border-radius: 0;    /* geen afgeronde hoeken buiten beeld */
+  border: 0;
+  border-radius: 0;
 
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
   max-width: none;
 
   position: relative;
@@ -313,7 +314,8 @@ body {
   display: flex;
   justify-content: center;
   align-items: stretch;
-  overflow-y: auto; /* hier kan de lange vrachtwagen scrollen */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .truck-visual {
@@ -400,6 +402,30 @@ body {
   box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 
+/* + TRUCK KNOP IN DETAIL VIEW */
+.duplicate-truck-btn {
+  margin-top: 8px;
+  width: clamp(140px, 55vw, 220px); /* zelfde breedte als slots-grid / truck */
+  border-radius: 999px;
+  border: none;
+  padding: 10px 16px;
+  background: #30c48c;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.25);
+}
+
+.duplicate-truck-btn:hover {
+  filter: brightness(0.97);
+}
+
+.duplicate-truck-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.26);
+}
+
 /* Orders rechts */
 
 .orders-panel {
@@ -408,6 +434,7 @@ body {
   padding: 8px 10px;
   border: 1px solid #e0e4ea;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .orders-panel h3 {

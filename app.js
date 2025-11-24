@@ -1,3 +1,5 @@
+// app.js
+
 // Aantal vakken per vrachtwagen
 const NUM_SLOTS = 33;
 const SLOTS_PER_ROW = 3;
@@ -24,7 +26,7 @@ const state = {
   days: {},
   selectedTruckId: null,
   selectedOrderId: null,
-  pendingPlacement: null, // {truckId, orderId, startSlotIndex}
+  pendingPlacement: null, // {truckId, runId, startSlotIndex}
 };
 
 // DOM referenties
@@ -49,10 +51,10 @@ const deleteTruckBtn = document.getElementById("delete-truck-btn");
 const backToListBtn = document.getElementById("back-to-list-btn");
 const openMapBtn = document.getElementById("open-map-btn");
 
-const slotsGridEl = document.getElementById("slots-grid");
+const slotsContainerEl = document.querySelector(".slots-container");
 const ordersListEl = document.getElementById("orders-list");
 
-// Order detail overlay
+// overlay order detail
 const orderDetailOverlay = document.getElementById("order-detail-overlay");
 const orderDetailMetaEl = document.getElementById("order-detail-meta");
 const orderDetailBodyEl = document.getElementById("order-detail-body");
@@ -71,6 +73,21 @@ const slotCountDecrease = document.getElementById("slot-count-decrease");
 const slotCountIncrease = document.getElementById("slot-count-increase");
 const slotCountCancel = document.getElementById("slot-count-cancel");
 const slotCountConfirm = document.getElementById("slot-count-confirm");
+
+// In de HTML stond één truck-visual. We gebruiken die als template en
+// vervangen de inhoud door een eigen wrapper voor meerdere trucks (verticaal).
+let slotsRunsContainerEl = null;
+(function prepareSlotsLayout() {
+  const templateVisual = slotsContainerEl.querySelector(".truck-visual");
+  if (templateVisual) {
+    slotsContainerEl.removeChild(templateVisual);
+  }
+  const wrapper = document.createElement("div");
+  wrapper.id = "slots-runs-container";
+  wrapper.className = "slots-runs-container";
+  slotsContainerEl.appendChild(wrapper);
+  slotsRunsContainerEl = wrapper;
+})();
 
 // Helpers datum
 
@@ -121,6 +138,7 @@ function ensureDayExists(dayIndex) {
 
 let nextTruckId = 1;
 let nextOrderId = 1;
+let nextRunId = 1;
 
 function createInitialTrucks() {
   const trucks = [];
@@ -170,13 +188,21 @@ function createDummyOrderDetails(orderId, label, info) {
   };
 }
 
-function createTruck(name) {
-  const truckId = nextTruckId++;
-
+function createRun(runIndex) {
   const slots = Array.from({ length: NUM_SLOTS }, () => ({
     orderId: null,
     shape: "square",
   }));
+
+  return {
+    id: nextRunId++,
+    name: runIndex === 0 ? "Voorkant" : `Voorkant – rit ${runIndex + 1}`,
+    slots,
+  };
+}
+
+function createTruck(name) {
+  const truckId = nextTruckId++;
 
   const baseOrders = [
     { label: "Order A", info: "Klant X" },
@@ -199,7 +225,8 @@ function createTruck(name) {
       label: tpl.label,
       info: tpl.info,
       truckId,
-      occupiedSlots: [], // meerdere slots mogelijk
+      runId: null, // aan welke sub-truck gekoppeld
+      occupiedSlots: [], // indices binnen die run
       createdAt: details.createdAt,
       postcode: details.postcode,
       location: details.location,
@@ -213,7 +240,7 @@ function createTruck(name) {
   return {
     id: truckId,
     name,
-    slots,
+    runs: [createRun(0)],
     orders,
   };
 }
@@ -231,6 +258,10 @@ function getTruckById(truckId) {
 function getTruckIndex(truckId) {
   const day = getCurrentDay();
   return day.trucks.findIndex((t) => t.id === truckId);
+}
+
+function getRunById(truck, runId) {
+  return truck.runs.find((r) => r.id === runId);
 }
 
 // Helpers rijen
@@ -262,7 +293,10 @@ function renderTruckList() {
     card.className = "truck-card";
     card.dataset.truckId = truck.id;
 
-    const isFull = truck.slots.every((slot) => slot.orderId !== null);
+    // truck is 'vol' als alle runs volledig gevuld zijn
+    const isFull = truck.runs.every((run) =>
+      run.slots.every((slot) => slot.orderId !== null)
+    );
     if (isFull) {
       card.classList.add("truck-full");
     }
@@ -326,14 +360,17 @@ function playSwipeIn(element, direction) {
   if (!element) return;
   element.classList.remove("view-swipe-in-left", "view-swipe-in-right");
   void element.offsetWidth;
-  const cls = direction === "right" ? "view-swipe-in-right" : "view-swipe-in-left";
+  const cls =
+    direction === "right" ? "view-swipe-in-right" : "view-swipe-in-left";
   element.classList.add(cls);
 }
 
-function animateSlots(indices, className, duration = 400) {
-  if (!Array.isArray(indices)) return;
+function animateSlots(runId, indices, className, duration = 400) {
+  if (!Array.isArray(indices) || !slotsRunsContainerEl) return;
   indices.forEach((idx) => {
-    const el = slotsGridEl.querySelector(`.slot[data-index="${idx}"]`);
+    const el = slotsRunsContainerEl.querySelector(
+      `.slot[data-run-id="${runId}"][data-index="${idx}"]`
+    );
     if (!el) return;
     el.classList.remove(className);
     void el.offsetWidth;
@@ -344,8 +381,11 @@ function animateSlots(indices, className, duration = 400) {
   });
 }
 
-function triggerSlotMorphAnimation(slotIndex, fromShape, toShape) {
-  const el = slotsGridEl.querySelector(`.slot[data-index="${slotIndex}"]`);
+function triggerSlotMorphAnimation(runId, slotIndex, fromShape, toShape) {
+  if (!slotsRunsContainerEl) return;
+  const el = slotsRunsContainerEl.querySelector(
+    `.slot[data-run-id="${runId}"][data-index="${slotIndex}"]`
+  );
   if (!el) return;
 
   let cls = null;
@@ -384,53 +424,102 @@ function openTruckDetail(truckId) {
   playSwipeIn(detailPageEl, "left");
 }
 
-// Slots / orders renderen
+// Slots / orders renderen – MEERDERE TRUCKS VERTICAAL
 
 function renderSlots(truck) {
-  slotsGridEl.innerHTML = "";
+  if (!slotsRunsContainerEl) return;
+  slotsRunsContainerEl.innerHTML = "";
 
-  const totalRows = Math.ceil(NUM_SLOTS / SLOTS_PER_ROW);
+  truck.runs.forEach((run, runIndex) => {
+    const runBlock = document.createElement("div");
+    runBlock.className = "truck-visual truck-run-block";
 
-  for (let row = 0; row < totalRows; row++) {
-    const rowDiv = document.createElement("div");
-    rowDiv.className = "slots-row";
+    const roof = document.createElement("div");
+    roof.className = "detail-truck-roof";
+    runBlock.appendChild(roof);
 
-    const indices = getRowSlotIndices(row);
-    const [leftIdx, midIdx, rightIdx] = indices;
+    const frontLabel = document.createElement("div");
+    frontLabel.className = "truck-label-front";
+    frontLabel.textContent =
+      runIndex === 0 ? "Voorkant" : `Voorkant – rit ${runIndex + 1}`;
+    runBlock.appendChild(frontLabel);
 
-    const left = truck.slots[leftIdx];
-    const mid = midIdx !== undefined ? truck.slots[midIdx] : null;
-    const right = rightIdx !== undefined ? truck.slots[rightIdx] : null;
+    const grid = document.createElement("div");
+    grid.className = "slots-grid";
+    grid.dataset.runId = run.id;
 
-    const rowHasRect =
-      (left && left.shape === "rect") || (right && right.shape === "rect");
+    const totalRows = Math.ceil(NUM_SLOTS / SLOTS_PER_ROW);
 
-    const createSlotEl = (slotObj, idx) => {
-      const slotEl = document.createElement("div");
-      slotEl.classList.add("slot", slotObj.shape === "rect" ? "rect" : "square");
-      slotEl.dataset.index = idx;
+    for (let row = 0; row < totalRows; row++) {
+      const rowDiv = document.createElement("div");
+      rowDiv.className = "slots-row";
 
-      if (slotObj.orderId === null) {
-        slotEl.classList.add("empty");
-      } else {
-        slotEl.classList.add("filled");
-        const order = truck.orders.find((o) => o.id === slotObj.orderId);
-        slotEl.textContent = order ? order.label.replace("Order ", "") : "?";
-      }
+      const indices = getRowSlotIndices(row);
+      const [leftIdx, midIdx, rightIdx] = indices;
 
-      slotEl.addEventListener("click", () => {
-        handleSlotClick(truck, idx);
-      });
+      const left = run.slots[leftIdx];
+      const mid = midIdx !== undefined ? run.slots[midIdx] : null;
+      const right = rightIdx !== undefined ? run.slots[rightIdx] : null;
 
-      return slotEl;
-    };
+      const rowHasRect =
+        (left && left.shape === "rect") || (right && right.shape === "rect");
 
-    if (left) rowDiv.appendChild(createSlotEl(left, leftIdx));
-    if (!rowHasRect && mid) rowDiv.appendChild(createSlotEl(mid, midIdx));
-    if (right) rowDiv.appendChild(createSlotEl(right, rightIdx));
+      const createSlotEl = (slotObj, idx) => {
+        const slotEl = document.createElement("div");
+        slotEl.classList.add(
+          "slot",
+          slotObj.shape === "rect" ? "rect" : "square"
+        );
+        slotEl.dataset.index = idx;
+        slotEl.dataset.runId = run.id;
 
-    slotsGridEl.appendChild(rowDiv);
-  }
+        if (slotObj.orderId === null) {
+          slotEl.classList.add("empty");
+        } else {
+          slotEl.classList.add("filled");
+          const order = truck.orders.find((o) => o.id === slotObj.orderId);
+          slotEl.textContent = order ? order.label.replace("Order ", "") : "?";
+        }
+
+        slotEl.addEventListener("click", () => {
+          handleSlotClick(truck, run, idx);
+        });
+
+        return slotEl;
+      };
+
+      if (left) rowDiv.appendChild(createSlotEl(left, leftIdx));
+      if (!rowHasRect && mid) rowDiv.appendChild(createSlotEl(mid, midIdx));
+      if (right) rowDiv.appendChild(createSlotEl(right, rightIdx));
+
+      grid.appendChild(rowDiv);
+    }
+
+    runBlock.appendChild(grid);
+
+    const backLabel = document.createElement("div");
+    backLabel.className = "truck-label-back";
+    backLabel.textContent = "Achterkant";
+    runBlock.appendChild(backLabel);
+
+    slotsRunsContainerEl.appendChild(runBlock);
+  });
+
+  // + Truck knop ONDER alle trucks
+  const addBtnWrapper = document.createElement("div");
+  addBtnWrapper.className = "add-capacity-wrapper";
+
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "add-capacity-btn";
+  addBtn.textContent = "+ Truck";
+
+  addBtn.addEventListener("click", () => {
+    addExtraRunForTruck(truck.id);
+  });
+
+  addBtnWrapper.appendChild(addBtn);
+  slotsRunsContainerEl.appendChild(addBtnWrapper);
 }
 
 function renderOrders(truck) {
@@ -507,7 +596,12 @@ function hideOrderDetail() {
 
 function buildRouteStops(truck) {
   const loaded = truck.orders
-    .filter((o) => o.occupiedSlots && o.occupiedSlots.length > 0)
+    .filter(
+      (o) =>
+        o.occupiedSlots &&
+        o.occupiedSlots.length > 0 &&
+        typeof o.runId === "number"
+    )
     .map((o) => {
       const deepestSlot = Math.max(...o.occupiedSlots);
       return {
@@ -641,8 +735,8 @@ function hideMap() {
 
 /* ---- Slot-count overlay helpers ---- */
 
-function openSlotCountOverlay(truckId, orderId, startSlotIndex) {
-  state.pendingPlacement = { truckId, orderId, startSlotIndex };
+function openSlotCountOverlay(truckId, runId, startSlotIndex) {
+  state.pendingPlacement = { truckId, runId, startSlotIndex };
   slotCountInput.value = "1";
   slotCountOverlay.classList.remove("hidden");
   slotCountOverlay.classList.add("overlay-open");
@@ -661,14 +755,14 @@ function closeSlotCountOverlay() {
 /**
  * Geeft true terug als deze slot NIET gebruikt mag worden om pallets in te plaatsen.
  */
-function isDisabledForPlacement(truck, slotIndex) {
+function isDisabledForPlacement(run, slotIndex) {
   const rowIndex = getRowIndex(slotIndex);
   const rowIndices = getRowSlotIndices(rowIndex);
   const [leftIdx, midIdx] = rowIndices;
 
-  const left = truck.slots[leftIdx];
+  const left = run.slots[leftIdx];
   const rightIdx = rowIndices[2];
-  const right = typeof rightIdx === "number" ? truck.slots[rightIdx] : null;
+  const right = typeof rightIdx === "number" ? run.slots[rightIdx] : null;
   const rowHasRect =
     (left && left.shape === "rect") || (right && right.shape === "rect");
 
@@ -706,10 +800,10 @@ function handleOrderClick(orderId) {
  * Check of er in deze rij nog een slot bij kan,
  * rekening houdend met reeds geplande (nog te plaatsen) indices.
  */
-function canPlaceOrderInRowWithPlanned(truck, targetSlotIndex, plannedIndices) {
+function canPlaceOrderInRowWithPlanned(run, targetSlotIndex, plannedIndices) {
   const rowIndex = getRowIndex(targetSlotIndex);
   const rowIndices = getRowSlotIndices(rowIndex);
-  const rowSlots = rowIndices.map((i) => truck.slots[i]);
+  const rowSlots = rowIndices.map((i) => run.slots[i]);
 
   const hasRect = rowSlots.some((s) => s && s.shape === "rect");
   const occupiedCount = rowSlots.filter((s) => s && s.orderId !== null).length;
@@ -728,26 +822,26 @@ function canPlaceOrderInRowWithPlanned(truck, targetSlotIndex, plannedIndices) {
 }
 
 /**
- * Plaats een order in N aaneengesloten lege slots vanaf startIndex.
+ * Plaats een order in N aaneengesloten lege slots vanaf startIndex IN ÉÉN RUN.
  */
-function placeOrderInAdjacentSlots(truck, order, startIndex, count) {
+function placeOrderInAdjacentSlots(truck, run, order, startIndex, count) {
   if (count < 1) return false;
 
   const candidateIndices = [];
   let idx = startIndex;
 
   while (candidateIndices.length < count && idx < NUM_SLOTS) {
-    if (isDisabledForPlacement(truck, idx)) {
+    if (isDisabledForPlacement(run, idx)) {
       idx++;
       continue;
     }
 
-    const slot = truck.slots[idx];
+    const slot = run.slots[idx];
     if (!slot) break;
 
     if (slot.orderId !== null) break;
 
-    if (!canPlaceOrderInRowWithPlanned(truck, idx, candidateIndices)) break;
+    if (!canPlaceOrderInRowWithPlanned(run, idx, candidateIndices)) break;
 
     candidateIndices.push(idx);
     idx++;
@@ -762,9 +856,10 @@ function placeOrderInAdjacentSlots(truck, order, startIndex, count) {
   }
 
   candidateIndices.forEach((slotIndex) => {
-    truck.slots[slotIndex].orderId = order.id;
+    run.slots[slotIndex].orderId = order.id;
   });
 
+  order.runId = run.id;
   order.occupiedSlots = [...candidateIndices];
   state.selectedOrderId = null;
   return true;
@@ -773,10 +868,11 @@ function placeOrderInAdjacentSlots(truck, order, startIndex, count) {
 /**
  * Klik op een slot.
  */
-function handleSlotClick(truck, slotIndex) {
-  const slot = truck.slots[slotIndex];
+function handleSlotClick(truck, run, slotIndex) {
+  const slot = run.slots[slotIndex];
   const currentOrderId = slot.orderId;
 
+  // geen order geselecteerd & leeg vak -> vorm togglen
   if (currentOrderId === null && state.selectedOrderId === null) {
     const prevShape = slot.shape;
     const makeRect = window.confirm(
@@ -784,26 +880,33 @@ function handleSlotClick(truck, slotIndex) {
     );
     const newShape = makeRect ? "rect" : "square";
 
-    setSlotShape(truck, slotIndex, newShape);
+    setSlotShape(run, slotIndex, newShape);
     renderSlots(truck);
 
     if (slot.shape !== prevShape) {
-      triggerSlotMorphAnimation(slotIndex, prevShape, slot.shape);
+      triggerSlotMorphAnimation(run.id, slotIndex, prevShape, slot.shape);
     }
     return;
   }
 
+  // gevuld vak, geen order geselecteerd -> volledige order uit deze run halen
   if (currentOrderId !== null && state.selectedOrderId === null) {
-    const slotEl = slotsGridEl.querySelector(`.slot[data-index="${slotIndex}"]`);
+    const slotEl = slotsRunsContainerEl.querySelector(
+      `.slot[data-run-id="${run.id}"][data-index="${slotIndex}"]`
+    );
 
     const performRemoval = () => {
       const order = truck.orders.find((o) => o.id === currentOrderId);
-      if (order) {
-        order.occupiedSlots = (order.occupiedSlots || []).filter(
-          (idx) => idx !== slotIndex
-        );
+      if (order && order.runId === run.id) {
+        // alle pallets van deze order uit deze run halen
+        (order.occupiedSlots || []).forEach((idx) => {
+          if (run.slots[idx] && run.slots[idx].orderId === order.id) {
+            run.slots[idx].orderId = null;
+          }
+        });
+        order.occupiedSlots = [];
+        order.runId = null;
       }
-      slot.orderId = null;
 
       renderSlots(truck);
       renderOrders(truck);
@@ -818,8 +921,9 @@ function handleSlotClick(truck, slotIndex) {
     return;
   }
 
+  // leeg vak + order geselecteerd -> plaats via pallet-overlay
   if (currentOrderId === null && state.selectedOrderId !== null) {
-    openSlotCountOverlay(truck.id, state.selectedOrderId, slotIndex);
+    openSlotCountOverlay(truck.id, run.id, slotIndex);
     return;
   }
 
@@ -827,8 +931,8 @@ function handleSlotClick(truck, slotIndex) {
 }
 
 // Vorm van slot aanpassen (vierkant/rechthoek)
-function setSlotShape(truck, slotIndex, newShape) {
-  const slot = truck.slots[slotIndex];
+function setSlotShape(run, slotIndex, newShape) {
+  const slot = run.slots[slotIndex];
   if (!slot || slot.shape === newShape) return;
 
   const rowIndex = getRowIndex(slotIndex);
@@ -845,7 +949,7 @@ function setSlotShape(truck, slotIndex, newShape) {
     }
 
     if (midIdx !== undefined) {
-      const midSlot = truck.slots[midIdx];
+      const midSlot = run.slots[midIdx];
       if (midSlot && midSlot.orderId !== null) {
         alert(
           "Het middelste vak in deze rij is gevuld. Maak dit vak eerst leeg voordat je een rechthoekige positie gebruikt."
@@ -917,6 +1021,17 @@ function deleteCurrentTruck() {
     openTruckDetail(newTruck.id);
     renderTruckList();
   }
+}
+
+// NIEUW: extra truck (rit) ONDER huidige truck (zelfde dag)
+function addExtraRunForTruck(truckId) {
+  const truck = getTruckById(truckId);
+  if (!truck) return;
+
+  const newRun = createRun(truck.runs.length);
+  truck.runs.push(newRun);
+
+  renderSlots(truck);
 }
 
 // Event listeners
@@ -1010,24 +1125,35 @@ slotCountConfirm.addEventListener("click", () => {
   const count = parseInt(slotCountInput.value || "1", 10);
   const validCount = Number.isNaN(count) ? 1 : Math.max(1, count);
 
-  const { truckId, orderId, startSlotIndex } = state.pendingPlacement;
+  const { truckId, runId, startSlotIndex } = state.pendingPlacement;
   const truck = getTruckById(truckId);
   if (!truck) {
     closeSlotCountOverlay();
     return;
   }
-  const order = truck.orders.find((o) => o.id === orderId);
+  const run = getRunById(truck, runId);
+  if (!run) {
+    closeSlotCountOverlay();
+    return;
+  }
+  const order = truck.orders.find((o) => o.id === state.selectedOrderId);
   if (!order) {
     closeSlotCountOverlay();
     return;
   }
 
-  const ok = placeOrderInAdjacentSlots(truck, order, startSlotIndex, validCount);
+  const ok = placeOrderInAdjacentSlots(
+    truck,
+    run,
+    order,
+    startSlotIndex,
+    validCount
+  );
   if (ok) {
     closeSlotCountOverlay();
     renderSlots(truck);
     renderOrders(truck);
-    animateSlots(order.occupiedSlots, "slot-placed", 450);
+    animateSlots(run.id, order.occupiedSlots, "slot-placed", 450);
   }
 });
 
