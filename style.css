@@ -26,17 +26,19 @@ body {
   overflow: hidden; /* app zelf regelt scroll */
 }
 
-/* App als 9:16 smartphone-frame, schaalbaar op elk scherm */
+/* App- frame: nu altijd volledige hoogte, breedte schaalt mee */
 #app {
   background: #ffffff;
   border: 6px solid #222;
   border-radius: 16px;
-  /* 9:16 verhouding vasthouden */
-  aspect-ratio: 9 / 16;
-  /* Schaal zodat hij altijd volledig in beeld past */
+
+  /* Gebruik volledige hoogte van het scherm */
+  height: 100vh;
+
+  /* Breedte schaalt mee als telefoon-frame (ongeveer 9:16) */
   width: min(100vw, 100vh * 9 / 16);
-  height: min(100vh, 100vw * 16 / 9);
   max-width: var(--app-max-width);
+
   position: relative;
   padding: 16px;
   display: flex;
@@ -301,7 +303,7 @@ body {
   gap: 8px;
 }
 
-/* BELANGRIJK: truck links + orders rechts ALTIJD naast elkaar */
+/* truck links + orders rechts naast elkaar */
 .detail-content {
   display: grid !important;
   grid-template-columns: 2fr 1.3fr !important;
@@ -316,7 +318,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: stretch;
-  overflow-y: auto;
+  overflow-y: auto; /* hier kan de lange vrachtwagen scrollen */
 }
 
 .truck-visual {

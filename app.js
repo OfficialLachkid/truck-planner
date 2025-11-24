@@ -325,7 +325,6 @@ function showDetailView() {
 function playSwipeIn(element, direction) {
   if (!element) return;
   element.classList.remove("view-swipe-in-left", "view-swipe-in-right");
-  // Force reflow
   void element.offsetWidth;
   const cls = direction === "right" ? "view-swipe-in-right" : "view-swipe-in-left";
   element.classList.add(cls);
@@ -507,11 +506,10 @@ function hideOrderDetail() {
 // Kaart helpers / routeplanning
 
 function buildRouteStops(truck) {
-  // Neem alleen orders die in de truck staan (minstens één slot)
   const loaded = truck.orders
     .filter((o) => o.occupiedSlots && o.occupiedSlots.length > 0)
     .map((o) => {
-      const deepestSlot = Math.max(...o.occupiedSlots); // hoogste index = achterkant
+      const deepestSlot = Math.max(...o.occupiedSlots);
       return {
         id: o.id,
         label: o.label,
@@ -523,7 +521,6 @@ function buildRouteStops(truck) {
       };
     });
 
-  // Sorteer van achterkant (hoogste index) naar voorkant (laagste index)
   loaded.sort((a, b) => b.deepestSlot - a.deepestSlot);
 
   return loaded;
@@ -558,7 +555,6 @@ function showMap() {
 
   const routeStops = buildRouteStops(truck);
 
-  // Groepeer stops per locatie voor de markers
   const markerGroups = new Map();
   routeStops.forEach((stop, index) => {
     const key = `${stop.lat.toFixed(5)},${stop.lng.toFixed(5)}`;
@@ -568,7 +564,7 @@ function showMap() {
         lat: stop.lat,
         lng: stop.lng,
         location: stop.location,
-        items: [], // {label, orderIndex, palletCount}
+        items: [],
       };
       markerGroups.set(key, group);
     }
@@ -579,7 +575,6 @@ function showMap() {
     });
   });
 
-  // Startpunt marker (home)
   const points = [];
   const startLatLng = [START_LOCATION.lat, START_LOCATION.lng];
 
@@ -596,7 +591,6 @@ function showMap() {
   routeLayer.addLayer(startMarker);
   points.push(startLatLng);
 
-  // Polyline-punten in route-volgorde (dubbele locaties één keer)
   const seenPointKeys = new Set();
   routeStops.forEach((stop) => {
     const key = `${stop.lat.toFixed(5)},${stop.lng.toFixed(5)}`;
@@ -606,7 +600,6 @@ function showMap() {
     }
   });
 
-  // Markers per unieke locatie met ALLE orders + volgorde + pallets
   markerGroups.forEach((group) => {
     const lines = group.items.map(
       (item) =>
@@ -614,9 +607,7 @@ function showMap() {
     );
     const popupHtml = `<strong>${group.location}</strong><br>${lines.join("<br>")}`;
 
-    const orderNumber = Math.min(
-      ...group.items.map((i) => i.orderIndex)
-    ); // eerste stopnummer
+    const orderNumber = Math.min(...group.items.map((i) => i.orderIndex));
     const icon = L.divIcon({
       className: "route-marker",
       html: `<div class="route-marker-inner">${orderNumber}</div>`,
@@ -667,10 +658,17 @@ function closeSlotCountOverlay() {
 
 /* ---- Helpers voor plaatsing ---- */
 
+function getRowIndex(slotIndex) {
+  return Math.floor(slotIndex / SLOTS_PER_ROW);
+}
+
+function getRowSlotIndices(rowIndex) {
+  const base = rowIndex * SLOTS_PER_ROW;
+  return [base, base + 1, base + 2].filter((i) => i < NUM_SLOTS);
+}
+
 /**
  * Geeft true terug als deze slot NIET gebruikt mag worden om pallets in te plaatsen.
- * Dit gebruik je vooral om de 'verborgen' middelste slot in een rij met rechthoek(en)
- * over te slaan bij het zoeken naar aaneengesloten plekken.
  */
 function isDisabledForPlacement(truck, slotIndex) {
   const rowIndex = getRowIndex(slotIndex);
@@ -683,7 +681,6 @@ function isDisabledForPlacement(truck, slotIndex) {
   const rowHasRect =
     (left && left.shape === "rect") || (right && right.shape === "rect");
 
-  // In een rij met minstens één rect is het middelste vak "verborgen" / niet klikbaar.
   return rowHasRect && slotIndex === midIdx;
 }
 
@@ -699,7 +696,6 @@ function handleOrderClick(orderId) {
   const isFree =
     !clickedOrder.occupiedSlots || clickedOrder.occupiedSlots.length === 0;
 
-  // Tweede klik op dezelfde vrije order -> details
   if (state.selectedOrderId === orderId) {
     if (isFree) {
       showOrderDetail(clickedOrder);
@@ -707,7 +703,6 @@ function handleOrderClick(orderId) {
     return;
   }
 
-  // Eerste klik -> selecteren
   state.selectedOrderId = orderId;
   hideOrderDetail();
   closeSlotCountOverlay();
@@ -743,10 +738,6 @@ function canPlaceOrderInRowWithPlanned(truck, targetSlotIndex, plannedIndices) {
 
 /**
  * Plaats een order in N aaneengesloten lege slots vanaf startIndex.
- * Retourneert true bij succes, false bij mislukking.
- *
- * BELANGRIJK: alle slots zonder orderId (square of rect) tellen als leeg,
- * maar de "verborgen" middelste slot in een rij met rect wordt overgeslagen.
  */
 function placeOrderInAdjacentSlots(truck, order, startIndex, count) {
   if (count < 1) return false;
@@ -755,7 +746,6 @@ function placeOrderInAdjacentSlots(truck, order, startIndex, count) {
   let idx = startIndex;
 
   while (candidateIndices.length < count && idx < NUM_SLOTS) {
-    // Midden-slot in een rij met rect? Sla gewoon over (geen barrière).
     if (isDisabledForPlacement(truck, idx)) {
       idx++;
       continue;
@@ -764,10 +754,8 @@ function placeOrderInAdjacentSlots(truck, order, startIndex, count) {
     const slot = truck.slots[idx];
     if (!slot) break;
 
-    // moet leeg zijn (vorm maakt niet uit)
     if (slot.orderId !== null) break;
 
-    // mag niet in conflict met rij-regel
     if (!canPlaceOrderInRowWithPlanned(truck, idx, candidateIndices)) break;
 
     candidateIndices.push(idx);
@@ -782,7 +770,6 @@ function placeOrderInAdjacentSlots(truck, order, startIndex, count) {
     return false;
   }
 
-  // Order in deze slots zetten
   candidateIndices.forEach((slotIndex) => {
     truck.slots[slotIndex].orderId = order.id;
   });
@@ -793,16 +780,12 @@ function placeOrderInAdjacentSlots(truck, order, startIndex, count) {
 }
 
 /**
- * Klik op een slot:
- * - Leeg, geen order geselecteerd -> vorm kiezen (met morph animatie)
- * - Gevuld, geen order -> order (deze slot) vrijmaken (met animatie)
- * - Leeg, wel order geselecteerd -> vraag aantal pallets + plaats
+ * Klik op een slot.
  */
 function handleSlotClick(truck, slotIndex) {
   const slot = truck.slots[slotIndex];
   const currentOrderId = slot.orderId;
 
-  // CASE A: Leeg slot, geen geselecteerde order -> vorm kiezen
   if (currentOrderId === null && state.selectedOrderId === null) {
     const prevShape = slot.shape;
     const makeRect = window.confirm(
@@ -813,14 +796,12 @@ function handleSlotClick(truck, slotIndex) {
     setSlotShape(truck, slotIndex, newShape);
     renderSlots(truck);
 
-    // Alleen morph als de vorm echt gewijzigd is
     if (slot.shape !== prevShape) {
       triggerSlotMorphAnimation(slotIndex, prevShape, slot.shape);
     }
     return;
   }
 
-  // CASE B: Slot is gevuld en er is geen order geselecteerd -> slot leeg maken (met shrink/fade)
   if (currentOrderId !== null && state.selectedOrderId === null) {
     const slotEl = slotsGridEl.querySelector(`.slot[data-index="${slotIndex}"]`);
 
@@ -846,13 +827,12 @@ function handleSlotClick(truck, slotIndex) {
     return;
   }
 
-  // CASE C: Slot is leeg en er is een order geselecteerd -> vraag aantal pallets
   if (currentOrderId === null && state.selectedOrderId !== null) {
     openSlotCountOverlay(truck.id, state.selectedOrderId, slotIndex);
     return;
   }
 
-  // CASE D: Slot is gevuld én er is ook een order geselecteerd -> (nog geen swap)
+  // gevuld + andere order geselecteerd -> nog geen swap
 }
 
 // Vorm van slot aanpassen (vierkant/rechthoek)
@@ -873,7 +853,6 @@ function setSlotShape(truck, slotIndex, newShape) {
       return;
     }
 
-    // Middelste slot mag niet gevuld zijn; anders eerst leegmaken
     if (midIdx !== undefined) {
       const midSlot = truck.slots[midIdx];
       if (midSlot && midSlot.orderId !== null) {
