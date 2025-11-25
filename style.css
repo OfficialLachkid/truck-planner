@@ -858,3 +858,18 @@ body {
 .add-capacity-btn:hover {
   filter: brightness(0.95);
 }
+
+.delete-trip-btn {
+  margin-top: 8px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.delete-trip-btn:hover {
+  filter: brightness(0.92);
+}

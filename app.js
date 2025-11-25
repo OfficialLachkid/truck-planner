@@ -468,6 +468,19 @@ function renderTrips(truck) {
     tripEl.appendChild(gridEl);
     tripEl.appendChild(backLabel);
 
+    // DELETE BUTTON (alleen tonen als er >1 rit is)
+    if (truck.trips.length > 1) {
+    const delBtn = document.createElement("button");
+    delBtn.className = "delete-trip-btn";
+    delBtn.textContent = "Verwijder rit";
+
+    delBtn.addEventListener("click", () => {
+        showDeleteTripConfirm(tripIndex);
+    });
+
+    tripEl.appendChild(delBtn);
+    }
+
     wrapperEl.appendChild(tripEl);
   });
 
@@ -508,6 +521,32 @@ function addTripForSelectedTruck() {
       behavior: "smooth",
     });
   }
+}
+
+// Rit verwijderen uit geselecteerde truck
+function deleteTripForSelectedTruck(tripIndex) {
+  const truck = getTruckById(state.selectedTruckId);
+  if (!truck) return;
+
+  if (truck.trips.length <= 1) {
+    alert("Je hebt minimaal één rit nodig.");
+    return;
+  }
+
+  // Check of er orders in zitten
+  const hasOrders = truck.orders.some(o => o.tripIndex === tripIndex);
+
+  if (hasOrders) {
+    alert("Deze rit bevat geplaatste orders. Verwijder eerst alle pallets.");
+    return;
+  }
+
+  // Verwijderen
+  truck.trips.splice(tripIndex, 1);
+
+  // indexen herstellen voor orders maar er zijn geen orders meer, dus safe
+
+  renderTrips(truck);
 }
 
 // Slots / orders renderen per rit
@@ -880,6 +919,51 @@ function closeSlotCountOverlay() {
     slotCountOverlay.classList.remove("overlay-open");
   }
 }
+
+// === Delete trip overlay ===
+const deleteTripOverlay = document.createElement("div");
+deleteTripOverlay.id = "delete-trip-overlay";
+deleteTripOverlay.className = "slot-count-overlay hidden";
+deleteTripOverlay.innerHTML = `
+  <div class="slot-count-card" style="max-width:320px; text-align:center;">
+    <div class="slot-count-title">Rit verwijderen?</div>
+    <div class="slot-count-sub">Weet je het zeker?</div>
+
+    <div style="margin-top:14px; display:flex; gap:10px; justify-content:center;">
+      <button id="delete-trip-no" style="
+        background:#10b981; color:white; border:none; padding:8px 16px; border-radius:999px;">
+        Nee
+      </button>
+
+      <button id="delete-trip-yes" style="
+        background:#ef4444; color:white; border:none; padding:8px 16px; border-radius:999px;">
+        Verwijder
+      </button>
+    </div>
+  </div>
+`;
+document.body.appendChild(deleteTripOverlay);
+
+let pendingTripDeleteIndex = null;
+
+function showDeleteTripConfirm(tripIndex) {
+  pendingTripDeleteIndex = tripIndex;
+  deleteTripOverlay.classList.remove("hidden");
+  deleteTripOverlay.classList.add("overlay-open");
+}
+
+function hideDeleteTripConfirm() {
+  deleteTripOverlay.classList.add("hidden");
+  deleteTripOverlay.classList.remove("overlay-open");
+  pendingTripDeleteIndex = null;
+}
+
+document.getElementById("delete-trip-no").addEventListener("click", hideDeleteTripConfirm);
+document.getElementById("delete-trip-yes").addEventListener("click", () => {
+  const truck = getTruckById(state.selectedTruckId);
+  deleteTripForSelectedTruck(pendingTripDeleteIndex);
+  hideDeleteTripConfirm();
+});
 
 /* ---- Helpers voor plaatsing ---- */
 
