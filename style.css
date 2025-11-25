@@ -1,32 +1,53 @@
-* {
+/* ===========================
+   GLOBAL RESET & VARIABLES
+   =========================== */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
 }
 
 :root {
   --app-max-width: 520px;
   --slot-size: clamp(26px, 4.8vw, 40px);
+  --color-red: #d13737;
+  --color-red-light: #ff7575;
+  --color-green: #10b981;
+  --color-green-strong: #30c48c;
+  --color-bg: #ffffff;
+  --color-border-soft: #e5e7eb;
+  --shadow-strong: 0 18px 45px rgba(15, 23, 42, 0.6);
+  --shadow-soft: 0 3px 8px rgba(15, 23, 42, 0.25);
 }
 
-/* Hele pagina zelf mag niet scrollen; alleen interne containers */
+/* Zorg dat content niet onder de notch / statusbar valt */
 html,
 body {
   height: 100%;
 }
 
 body {
-  background: #ffffff; /* geen zwarte randen meer rond de app */
+  background: var(--color-bg);
   min-height: 100vh;
-  padding: 0;
   margin: 0;
-  overflow: hidden; /* app zelf regelt scroll */
+  padding: 0;
+  overflow: hidden; /* scroll gebeurt in de views zelf */
+
+  /* iOS safe-area boven */
+  padding-top: env(safe-area-inset-top);
 }
 
-/* App-frame: nu altijd volledige breedte + hoogte van het zichtbare scherm */
+/* ===========================
+   APP LAYOUT
+   =========================== */
+
 #app {
-  background: #ffffff;
+  background: var(--color-bg);
   border: 0;
   border-radius: 0;
 
@@ -37,12 +58,15 @@ body {
 
   position: relative;
   padding: 16px;
+  padding-top: calc(16px + env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* binnen de app scrollen we per view */
+  overflow: hidden;
 }
 
-/* Top bars */
+/* ===========================
+   TOP BARS (DAGEN / TRUCKS)
+   =========================== */
 
 .top-bar {
   display: flex;
@@ -54,13 +78,18 @@ body {
   padding: 6px 10px;
 }
 
-/* Rode 3D look balk achter datum-header */
+.hidden {
+  display: none !important;
+}
+
+/* Dag-header: rode “3D” balk */
 #day-header {
-  background: linear-gradient(to bottom, #ff7575, #d13737);
+  background: linear-gradient(to bottom, var(--color-red-light), var(--color-red));
   box-shadow: 0 3px 5px rgba(0, 0, 0, 0.25);
   border-radius: 999px;
 }
 
+/* Truck-header boven detail-view */
 #truck-header {
   background: transparent;
   box-shadow: none;
@@ -71,11 +100,7 @@ body {
   justify-content: space-between;
 }
 
-.hidden {
-  display: none !important;
-}
-
-/* Basis look voor ALLE nav-btn knoppen */
+/* Algemene nav-buttons (pijlen, terug, etc.) */
 .nav-btn {
   border: none;
   background: rgba(255, 255, 255, 0.9);
@@ -93,8 +118,7 @@ body {
   background: #f1f1f1;
 }
 
-/* ==== CHEVRONS voor agenda/truck pijlen ==== */
-
+/* Chevron-knoppen (dag / truck wisselen) */
 #prev-day-btn,
 #next-day-btn,
 #prev-truck-btn,
@@ -121,16 +145,15 @@ body {
   text-shadow: 0 0 1px currentColor;
 }
 
-/* Terug-knop tekst + pijl blijven gewoon */
+/* “Terug”-knop met normale tekst */
 #back-to-list-btn {
   font-size: 18px;
 }
-
 #back-to-list-btn::first-letter {
   font-weight: 900;
 }
 
-/* Wrapper om context + datum in header */
+/* Datum-labels in header */
 .day-label-wrapper {
   display: flex;
   flex-direction: column;
@@ -138,7 +161,6 @@ body {
   flex: 1 1 auto;
 }
 
-/* Kleine tekst "Vandaag", "Morgen", "Gisteren" */
 .day-context-label {
   font-size: 12px;
   font-weight: 500;
@@ -146,7 +168,6 @@ body {
   margin-bottom: -2px;
 }
 
-/* Grote datum zelf */
 .day-label {
   font-size: 20px;
   font-weight: 700;
@@ -154,11 +175,12 @@ body {
   color: #ffffff;
 }
 
-/* In truck-header gebruiken we zwarte tekst */
+/* In truck-header gebruiken we donkere tekst */
 #truck-header .day-label {
   color: #222;
 }
 
+/* Extra button-stijlen */
 .danger-btn {
   border: none;
   background: #e05555;
@@ -169,7 +191,6 @@ body {
   cursor: pointer;
   flex-shrink: 0;
 }
-
 .danger-btn:hover {
   filter: brightness(0.95);
 }
@@ -179,7 +200,9 @@ body {
   padding: 6px 12px;
 }
 
-/* Views */
+/* ===========================
+   VIEWS (LIST / DETAIL)
+   =========================== */
 
 .view {
   display: none;
@@ -191,7 +214,7 @@ body {
   display: block;
 }
 
-/* Truck list view (agenda) */
+/* ====== TRUCK-LIST VIEW ====== */
 
 #truck-list-view {
   overflow-y: auto;
@@ -210,6 +233,7 @@ body {
   width: 100%;
 }
 
+/* Truck-card in agenda */
 .truck-card {
   width: 80px;
   height: 230px;
@@ -225,7 +249,7 @@ body {
   height: 45px;
   border-radius: 10px 10px 4px 4px;
   background: #f6b21a;
-  box-shadow: 0 3px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 3px 4px rgba(0, 0, 0, 0.2);
 }
 
 .truck-body {
@@ -250,13 +274,14 @@ body {
   background: #c53030;
 }
 
+/* “+” truck toevoegen in agenda */
 .add-truck-btn {
   width: 80px;
   height: 230px;
   border-radius: 16px;
   border: none;
   font-size: 40px;
-  background: #30c48c;
+  background: var(--color-green-strong);
   color: white;
   cursor: pointer;
   flex-shrink: 0;
@@ -264,17 +289,15 @@ body {
   align-items: center;
   justify-content: center;
 }
-
 .add-truck-btn:hover {
   filter: brightness(0.95);
 }
 
-/* === DETAIL VIEW (slots + orders) === */
+/* ====== TRUCK-DETAIL VIEW ====== */
 
 #truck-detail-view {
   display: none;
 }
-
 #truck-detail-view.view.active-view {
   display: block;
 }
@@ -308,17 +331,19 @@ body {
   overflow: hidden;
 }
 
-/* Slots / truck links */
+/* ===========================
+   TRUCK / SLOTS (LINKERKANT)
+   =========================== */
 
-/* BASIS: container links naast orders */
 .slots-container {
   display: flex;
   flex-direction: column;
-  align-items: center;   /* horizontaal centreren van ritten */
+  align-items: center;
   flex: 1 1 auto;
-  overflow: hidden;      /* scroll gebeurt in .truck-runs-scroll */
+  overflow: hidden; /* daadwerkelijke scroll in .truck-runs-scroll */
 }
 
+/* Oud enkel-truck visual (nu niet meer nodig, maar kan blijven) */
 .truck-visual {
   display: flex;
   flex-direction: column;
@@ -341,6 +366,7 @@ body {
   color: #555;
 }
 
+/* Basismatrix voor slots */
 .slots-grid {
   width: clamp(140px, 55vw, 220px);
   background: #e4e7ea;
@@ -400,34 +426,34 @@ body {
 
 .slot:hover {
   transform: translateY(-1px);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
-/* + TRUCK KNOP IN DETAIL VIEW */
+/* Extra truck-knop (niet per se in gebruik, maar laten staan) */
 .duplicate-truck-btn {
   margin-top: 8px;
-  width: clamp(140px, 55vw, 220px); /* zelfde breedte als slots-grid / truck */
+  width: clamp(140px, 55vw, 220px);
   border-radius: 999px;
   border: none;
   padding: 10px 16px;
-  background: #30c48c;
+  background: var(--color-green-strong);
   color: #ffffff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.25);
+  box-shadow: var(--shadow-soft);
 }
-
 .duplicate-truck-btn:hover {
   filter: brightness(0.97);
 }
-
 .duplicate-truck-btn:active {
   transform: translateY(1px);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.26);
 }
 
-/* Orders rechts */
+/* ===========================
+   ORDERS PANEL (RECHTS)
+   =========================== */
 
 .orders-panel {
   background: #f8fafb;
@@ -473,7 +499,9 @@ body {
   box-shadow: 0 0 0 1px rgba(43, 168, 109, 0.4);
 }
 
-/* === OVERLAYS (order details + kaart + pallets) === */
+/* ===========================
+   OVERLAYS (ORDER / MAP / PALLETS / DELETE-RIT)
+   =========================== */
 
 .order-detail-overlay,
 .map-overlay,
@@ -492,6 +520,7 @@ body {
   transition: opacity 0.25s ease-out;
 }
 
+/* generieke open-state */
 .order-detail-overlay.overlay-open,
 .map-overlay.overlay-open,
 .slot-count-overlay.overlay-open {
@@ -499,14 +528,16 @@ body {
   pointer-events: auto;
 }
 
+/* kaarten voor order & map & pallets delen grotendeels dezelfde look */
 .order-detail-card,
-.map-card {
+.map-card,
+.slot-count-card {
   background: #ffffff;
   border-radius: 18px;
   padding: 16px 18px 14px;
   width: 90%;
   max-width: 520px;
-  box-shadow: 0 18px 45px rgba(15,23,42,0.6);
+  box-shadow: var(--shadow-strong);
   color: #111827;
   display: flex;
   flex-direction: column;
@@ -522,11 +553,15 @@ body {
   font-size: 1.1rem;
 }
 
+/* animatie wanneer overlay opent */
 .order-detail-overlay.overlay-open .order-detail-card,
-.map-overlay.overlay-open .map-card {
+.map-overlay.overlay-open .map-card,
+.slot-count-overlay.overlay-open .slot-count-card {
   transform: translateY(0);
   opacity: 1;
 }
+
+/* ---------- Order detail ---------- */
 
 .order-detail-meta {
   display: grid;
@@ -546,7 +581,7 @@ body {
 
 .order-detail-table th,
 .order-detail-table td {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border-soft);
   padding: 6px 8px;
   text-align: left;
 }
@@ -561,7 +596,7 @@ body {
   align-self: flex-end;
 }
 
-/* Kaart */
+/* ---------- Kaart overlay ---------- */
 
 .map-container {
   width: 100%;
@@ -577,7 +612,27 @@ body {
   }
 }
 
-/* Marker-stijlen voor route (Leaflet divIcon) */
+/* Tabs boven kaart om rit te kiezen */
+.map-trip-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 6px;
+}
+
+.map-trip-tab {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #111827;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+/* js zet achtergrond / kleur voor active tab */
+
+/* Marker-style voor Leaflet divIcon */
 .route-marker-inner {
   width: 26px;
   height: 26px;
@@ -598,30 +653,16 @@ body {
   border-color: #047857;
 }
 
-/* === OVERLAY: aantal pallets (slot count) === */
+/* ---------- Slot count overlay ---------- */
 
 .slot-count-overlay.hidden {
   display: none !important;
 }
 
 .slot-count-card {
-  background: #ffffff;
-  border-radius: 18px;
-  padding: 16px 18px 14px;
   width: 86%;
   max-width: 420px;
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.6);
-  display: flex;
-  flex-direction: column;
   gap: 10px;
-  transform: translateY(12px);
-  opacity: 0;
-  transition: transform 0.25s ease-out, opacity 0.25s ease-out;
-}
-
-.slot-count-overlay.overlay-open .slot-count-card {
-  transform: translateY(0);
-  opacity: 1;
 }
 
 .slot-count-title {
@@ -634,19 +675,21 @@ body {
   color: #4b5563;
 }
 
-/* ⬇ NIEUW: hinttekst voor max aantal pallets */
-.slot-count-max-hint {
+/* hint met maximaal aantal pallets */
+#slot-count-max {
   margin-top: 4px;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: #6b7280;
 }
 
+/* invoer + / - */
 .slot-count-input-row {
   display: flex;
   align-items: stretch;
   border-radius: 999px;
   overflow: hidden;
   border: 1px solid #e5e7eb;
+  margin-top: 6px;
 }
 
 .slot-count-step {
@@ -679,7 +722,6 @@ body {
   -webkit-appearance: none;
   margin: 0;
 }
-
 #slot-count-input[type="number"] {
   -moz-appearance: textfield;
 }
@@ -706,11 +748,15 @@ body {
 }
 
 .slot-count-confirm {
-  background: #10b981;
+  background: var(--color-green);
   color: #ffffff;
 }
 
-/* === Slot animaties === */
+/* Delete-trip overlay hergebruikt .slot-count-overlay + .slot-count-card */
+
+/* ===========================
+   ANIMATIES
+   =========================== */
 
 .slot-placed {
   animation: slotFadePulse 0.45s ease-out;
@@ -747,7 +793,6 @@ body {
 }
 
 /* Apple-like morph tussen square ↔ rect */
-
 .slot-morph-square-to-rect,
 .slot-morph-rect-to-square {
   animation: slotMorphApple 0.26s cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -768,8 +813,7 @@ body {
   }
 }
 
-/* === View swipe animaties voor dag / truck wisselen === */
-
+/* View swipe animaties voor dag / truck wisselen */
 @keyframes viewSwipeInLeft {
   from {
     opacity: 0;
@@ -800,26 +844,28 @@ body {
   animation: viewSwipeInRight 0.28s ease-out;
 }
 
-/* ==== MEERDERE RITTEN IN DETAIL VIEW ==== */
+/* ===========================
+   MEERDERE RITTEN IN DETAIL VIEW
+   =========================== */
 
-/* Scrollbare zone waar alle ritten onder elkaar in staan */
+/* Scrollbare zone met alle ritten onder elkaar */
 .truck-runs-scroll {
   width: 100%;
   flex: 1 1 auto;
-  overflow-y: auto;      /* ritten onder elkaar scrollen */
+  overflow-y: auto;
   overflow-x: hidden;
 }
 
-/* De daadwerkelijke "verticale layout group" met ritten */
+/* Verticale stack van ritten */
 .truck-runs-wrapper {
   display: flex;
-  flex-direction: column;  /* onder elkaar */
+  flex-direction: column;
   align-items: center;
-  gap: 24px;               /* ruimte tussen ritten */
+  gap: 24px;
   padding-bottom: 16px;
 }
 
-/* Eén rit (truck) */
+/* Eén rit */
 .truck-run {
   display: flex;
   flex-direction: column;
@@ -827,7 +873,7 @@ body {
   width: 100%;
 }
 
-/* De kop (geel blok + tekst "Voorkant – rit X") blijft gecentreerd */
+/* Kop (dak + “Voorkant – rit X”) */
 .truck-run-header {
   display: flex;
   flex-direction: column;
@@ -835,49 +881,47 @@ body {
   margin-bottom: 8px;
 }
 
-/* Slots-grid per rit past zich netjes aan de breedte aan */
+/* Slots-grid binnen rit */
 .truck-run .slots-grid {
   width: clamp(140px, 55vw, 220px);
 }
 
-/* Label "Achterkant" onder elke rit */
+/* Label “Achterkant” onder iedere rit */
 .truck-run-footer {
   margin-top: 6px;
   font-size: 12px;
   color: #555;
 }
 
-/* + Truck knop heeft dezelfde breedte als de ritten */
+/* + Truck (rit toevoegen) onder alle ritten */
 .add-capacity-btn {
   margin-top: 12px;
-  width: clamp(140px, 55vw, 220px); /* zelfde breedte als slots-grid */
+  width: clamp(140px, 55vw, 220px);
   padding: 10px 0;
   border-radius: 14px;
   border: none;
-  background: #10b981;
+  background: var(--color-green);
   color: #ffffff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   display: block;
 }
-
 .add-capacity-btn:hover {
   filter: brightness(0.95);
 }
 
-/* Delete-knop bij een rit */
+/* Verwijder rit-knop */
 .delete-trip-btn {
   margin-top: 8px;
   background: #ef4444;
-  color: white;
+  color: #ffffff;
   border: none;
   padding: 6px 12px;
   border-radius: 999px;
   cursor: pointer;
   font-size: 13px;
 }
-
 .delete-trip-btn:hover {
   filter: brightness(0.92);
 }
