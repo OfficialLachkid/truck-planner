@@ -634,6 +634,13 @@ body {
   color: #4b5563;
 }
 
+/* ⬇ NIEUW: hinttekst voor max aantal pallets */
+.slot-count-max-hint {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
 .slot-count-input-row {
   display: flex;
   align-items: stretch;
@@ -859,6 +866,7 @@ body {
   filter: brightness(0.95);
 }
 
+/* Delete-knop bij een rit */
 .delete-trip-btn {
   margin-top: 8px;
   background: #ef4444;

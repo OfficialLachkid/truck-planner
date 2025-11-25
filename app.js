@@ -77,6 +77,9 @@ const slotCountIncrease = document.getElementById("slot-count-increase");
 const slotCountCancel = document.getElementById("slot-count-cancel");
 const slotCountConfirm = document.getElementById("slot-count-confirm");
 
+// hint-element voor max pallets
+const slotCountMaxHint = document.getElementById("slot-count-max");
+
 // Helpers datum
 
 function createDateByIndex(dayIndex) {
@@ -910,6 +913,22 @@ function openSlotCountOverlay(truckId, tripIndex, orderId, startSlotIndex) {
     slotCountInput.focus();
     slotCountInput.select();
   }
+
+  // ⬇ Maximaal aantal pallets berekenen en tonen
+  const truck = getTruckById(truckId);
+  if (truck && typeof calculateMaxPalletsFromSlot === "function") {
+    const max = calculateMaxPalletsFromSlot(truck, tripIndex, startSlotIndex);
+
+    if (slotCountMaxHint) {
+      if (max === 0) {
+        slotCountMaxHint.textContent =
+          "Op deze positie zijn geen vrije pallet-plekken beschikbaar.";
+      } else {
+        slotCountMaxHint.textContent =
+          `Maximaal ${max} pallet-plek${max > 1 ? "ken" : ""} vanaf deze positie.`;
+      }
+    }
+  }
 }
 
 function closeSlotCountOverlay() {
@@ -1108,6 +1127,45 @@ function placeOrderInAdjacentSlots(truck, tripIndex, order, startIndex, count) {
   order.occupiedSlots = [...candidateIndices];
   state.selectedOrderId = null;
   return true;
+}
+
+// Bepaal hoeveel pallets er maximaal geplaatst kunnen worden
+// vanaf een startIndex, volgens dezelfde regels als placeOrderInAdjacentSlots.
+function calculateMaxPalletsFromSlot(truck, tripIndex, startIndex) {
+  const trip = truck.trips[tripIndex];
+  if (!trip) return 0;
+
+  const candidateIndices = [];
+  let idx = startIndex;
+
+  while (idx < NUM_SLOTS) {
+    // zelfde checks als bij plaatsing
+    if (isDisabledForPlacement(truck, tripIndex, idx)) {
+      idx++;
+      continue;
+    }
+
+    const slot = trip.slots[idx];
+    if (!slot) break;
+
+    if (slot.orderId !== null) break;
+
+    if (
+      !canPlaceOrderInRowWithPlanned(
+        truck,
+        tripIndex,
+        idx,
+        candidateIndices
+      )
+    ) {
+      break;
+    }
+
+    candidateIndices.push(idx);
+    idx++;
+  }
+
+  return candidateIndices.length;
 }
 
 /**
