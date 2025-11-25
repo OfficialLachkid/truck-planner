@@ -416,15 +416,24 @@ function openTruckDetail(truckId) {
 function renderTrips(truck) {
   if (!slotsContainerEl) return;
 
+  // 1) Huidige scrollpositie bewaren (als er al een scroll-container is)
+  let restoreScroll = 0;
+  const oldScrollEl = slotsContainerEl.querySelector(".truck-runs-scroll");
+  if (oldScrollEl) {
+    restoreScroll = oldScrollEl.scrollTop;
+  }
+
+  // 2) Container leegmaken
   slotsContainerEl.innerHTML = "";
 
-  // Scrollcontainer + wrapper voor alle ritten
+  // 3) NIEUWE scroll-container + wrapper aanmaken
   const scrollEl = document.createElement("div");
   scrollEl.className = "truck-runs-scroll";
 
   const wrapperEl = document.createElement("div");
   wrapperEl.className = "truck-runs-wrapper";
 
+  // 4) Alle ritten opbouwen
   truck.trips.forEach((trip, tripIndex) => {
     const tripEl = document.createElement("div");
     tripEl.className = "truck-run";
@@ -462,10 +471,11 @@ function renderTrips(truck) {
     wrapperEl.appendChild(tripEl);
   });
 
+  // 5) wrapper in scroll-container, scroll-container in slotsContainer
   scrollEl.appendChild(wrapperEl);
   slotsContainerEl.appendChild(scrollEl);
 
-  // + Truck knop onder alle ritten
+  // 6) + Truck knop onder alle ritten
   const addBtn = document.createElement("button");
   addBtn.id = "add-capacity-btn";
   addBtn.textContent = "+ Truck";
@@ -477,8 +487,8 @@ function renderTrips(truck) {
 
   slotsContainerEl.appendChild(addBtn);
 
-  // Zorg dat we altijd vanaf de bovenkant kunnen scrollen
-  scrollEl.scrollTop = Math.min(scrollEl.scrollTop, scrollEl.scrollHeight);
+  // 7) Scrollpositie herstellen
+  scrollEl.scrollTop = restoreScroll;
 }
 
 // Een rit toevoegen aan de geselecteerde truck
@@ -579,6 +589,7 @@ function renderOrders(truck) {
 
     li.innerHTML = `<span>${order.label}</span><br><small>${order.info}</small>`;
 
+    // let op: GEEN stopPropagation nodig meer; deselect zit nu op ordersListEl
     li.addEventListener("click", () => {
       handleOrderClick(order.id);
     });
@@ -854,6 +865,12 @@ function openSlotCountOverlay(truckId, tripIndex, orderId, startSlotIndex) {
   slotCountInput.value = "1";
   slotCountOverlay.classList.remove("hidden");
   slotCountOverlay.classList.add("overlay-open");
+
+  // ⬇ Focus direct op het invoerveld + selecteer huidige waarde
+  if (slotCountInput) {
+    slotCountInput.focus();
+    slotCountInput.select();
+  }
 }
 
 function closeSlotCountOverlay() {
@@ -898,19 +915,31 @@ function handleOrderClick(orderId) {
     !clickedOrder.occupiedSlots ||
     clickedOrder.occupiedSlots.length === 0;
 
+  // ✔ BEWAAR SCROLLPOS BEFORE RERENDER
+  const scrollEl = slotsContainerEl.querySelector(".truck-runs-scroll");
+  const restoreScroll = scrollEl ? scrollEl.scrollTop : 0;
+
+  // tweede klik op dezelfde → toon details
   if (state.selectedOrderId === orderId) {
-    if (isFree) {
-      showOrderDetail(clickedOrder);
-    }
+    if (isFree) showOrderDetail(clickedOrder);
+
+    // ✔ RESTORE SCROLL
+    const newScroll = slotsContainerEl.querySelector(".truck-runs-scroll");
+    if (newScroll) newScroll.scrollTop = restoreScroll;
     return;
   }
 
+  // nieuwe selectie
   state.selectedOrderId = orderId;
   hideOrderDetail();
   closeSlotCountOverlay();
 
   renderOrders(truck);
   renderTrips(truck);
+
+  // ✔ RESTORE SCROLL
+  const newScroll = slotsContainerEl.querySelector(".truck-runs-scroll");
+  if (newScroll) newScroll.scrollTop = restoreScroll;
 }
 
 /**
@@ -1242,11 +1271,14 @@ slotCountCancel.addEventListener("click", () => {
   closeSlotCountOverlay();
 });
 
-slotCountConfirm.addEventListener("click", () => {
+slotCountConfirm.addEventListener("click", handleSlotCountConfirm);
+
+function handleSlotCountConfirm() {
   if (!state.pendingPlacement) {
     closeSlotCountOverlay();
     return;
   }
+
   const count = parseInt(slotCountInput.value || "1", 10);
   const validCount = Number.isNaN(count) ? 1 : Math.max(1, count);
 
@@ -1274,6 +1306,47 @@ slotCountConfirm.addEventListener("click", () => {
     renderTrips(truck);
     renderOrders(truck);
     animateSlots(tripIndex, order.occupiedSlots, "slot-placed", 450);
+  }
+}
+
+document.addEventListener("click", (e) => {
+  if (!state.selectedOrderId) return;
+
+  // 1 — Klik op (of binnen) een order-item? → NIET deselecten
+  const clickedOrderItem = e.target.closest(".order-item");
+  if (clickedOrderItem) return;
+
+  // 2 — Klik ergens IN de order-detail-overlay? → NIET deselecten
+  //    (werkt ook als hideOrderDetail() tijdens dezelfde klik wordt aangeroepen)
+  if (orderDetailOverlay && orderDetailOverlay.contains(e.target)) return;
+
+  // 3 — Klik was buiten orders én buiten overlay → DESELECT
+  const truck = getTruckById(state.selectedTruckId);
+  if (!truck) return;
+
+  const scrollEl = slotsContainerEl.querySelector(".truck-runs-scroll");
+  const restoreScroll = scrollEl ? scrollEl.scrollTop : 0;
+
+  state.selectedOrderId = null;
+  renderOrders(truck);
+  renderTrips(truck);
+
+  const newScroll = slotsContainerEl.querySelector(".truck-runs-scroll");
+  if (newScroll) newScroll.scrollTop = restoreScroll;
+});
+
+document.addEventListener("keydown", (e) => {
+  // Alleen reageren als de pallet-overlay open staat
+  if (!slotCountOverlay.classList.contains("overlay-open")) return;
+
+  if (e.key === "Enter") {
+    e.preventDefault();           // voorkomt submit/blur
+    handleSlotCountConfirm();     // zelfde als op "Bevestig" klikken
+  }
+
+  if (e.key === "Escape" || e.key === "Esc") {
+    e.preventDefault();
+    closeSlotCountOverlay();      // zelfde als "Annuleer"
   }
 });
 
