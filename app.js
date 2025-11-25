@@ -25,6 +25,7 @@ const state = {
   selectedTruckId: null,
   selectedOrderId: null,
   pendingPlacement: null, // {truckId, tripIndex, orderId, startSlotIndex}
+  pendingShapeSelection: null, // {truckId, tripIndex, slotIndex}
 };
 
 // welke rit is actief in de kaart-overlay
@@ -79,6 +80,12 @@ const slotCountConfirm = document.getElementById("slot-count-confirm");
 
 // hint-element voor max pallets
 const slotCountMaxHint = document.getElementById("slot-count-max");
+
+// Shape-selectie overlay
+const shapeOverlay = document.getElementById("shape-overlay");
+const shapeSquareBtn = document.getElementById("shape-square-btn");
+const shapeRectBtn   = document.getElementById("shape-rect-btn");
+const shapeCancelBtn = document.getElementById("shape-cancel-btn");
 
 // Helpers datum
 
@@ -939,6 +946,73 @@ function closeSlotCountOverlay() {
   }
 }
 
+/* ---- Shape-select overlay helpers ---- */
+
+function openShapeOverlay(truckId, tripIndex, slotIndex) {
+  state.pendingShapeSelection = { truckId, tripIndex, slotIndex };
+
+  if (!shapeOverlay) return;
+
+  shapeOverlay.classList.remove("hidden");
+  shapeOverlay.classList.add("overlay-open");
+}
+
+function closeShapeOverlay() {
+  state.pendingShapeSelection = null;
+
+  if (!shapeOverlay) return;
+
+  shapeOverlay.classList.add("hidden");
+  shapeOverlay.classList.remove("overlay-open");
+}
+
+function handleShapeChoice(newShape) {
+  const pending = state.pendingShapeSelection;
+  if (!pending) return;
+
+  const { truckId, tripIndex, slotIndex } = pending;
+  const truck = getTruckById(truckId);
+  if (!truck) {
+    closeShapeOverlay();
+    return;
+  }
+
+  const trip = truck.trips[tripIndex];
+  if (!trip) {
+    closeShapeOverlay();
+    return;
+  }
+
+  const slot = trip.slots[slotIndex];
+  if (!slot) {
+    closeShapeOverlay();
+    return;
+  }
+
+  const prevShape = slot.shape;
+
+  // Als je dezelfde vorm kiest, gewoon sluiten
+  if (prevShape === newShape) {
+    closeShapeOverlay();
+    return;
+  }
+
+  // setSlotShape voert alle validatie uit (bijv. middelste vak mag geen rechthoek)
+  const rowIndex = getRowIndex(slotIndex);
+  const rowIndices = getRowSlotIndices(rowIndex);
+
+  // We proberen de vorm te zetten; als het niet mag geeft setSlotShape zelf een alert
+  setSlotShape(truck, tripIndex, slotIndex, newShape);
+
+  // Als vorm effectief gewijzigd is: animatie + re-render
+  if (trip.slots[slotIndex].shape !== prevShape) {
+    renderTrips(truck);
+    triggerSlotMorphAnimation(tripIndex, slotIndex, prevShape, trip.slots[slotIndex].shape);
+  }
+
+  closeShapeOverlay();
+}
+
 // === Delete trip overlay ===
 const deleteTripOverlay = document.createElement("div");
 deleteTripOverlay.id = "delete-trip-overlay";
@@ -1176,20 +1250,9 @@ function handleSlotClick(truck, tripIndex, slotIndex) {
   const slot = trip.slots[slotIndex];
   const currentOrderId = slot.orderId;
 
-  // Geen order geselecteerd + leeg slot -> vorm wisselen
+  // Geen order geselecteerd + leeg slot -> vorm kiezen via overlay
   if (currentOrderId === null && state.selectedOrderId === null) {
-    const prevShape = slot.shape;
-    const makeRect = window.confirm(
-      "Wil je deze slot rechthoekig maken?\n\nOK = Rechthoek\nAnnuleer = Vierkant"
-    );
-    const newShape = makeRect ? "rect" : "square";
-
-    setSlotShape(truck, tripIndex, slotIndex, newShape);
-    renderTrips(truck);
-
-    if (slot.shape !== prevShape) {
-      triggerSlotMorphAnimation(tripIndex, slotIndex, prevShape, slot.shape);
-    }
+    openShapeOverlay(truck.id, tripIndex, slotIndex);
     return;
   }
 
@@ -1387,6 +1450,25 @@ deleteTruckBtn.addEventListener("click", () => {
   closeSlotCountOverlay();
   deleteCurrentTruck();
 });
+
+/* Shape-select events */
+if (shapeSquareBtn) {
+  shapeSquareBtn.addEventListener("click", () => {
+    handleShapeChoice("square");
+  });
+}
+
+if (shapeRectBtn) {
+  shapeRectBtn.addEventListener("click", () => {
+    handleShapeChoice("rect");
+  });
+}
+
+if (shapeCancelBtn) {
+  shapeCancelBtn.addEventListener("click", () => {
+    closeShapeOverlay();
+  });
+}
 
 orderDetailCloseBtn.addEventListener("click", hideOrderDetail);
 
