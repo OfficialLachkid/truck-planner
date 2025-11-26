@@ -277,10 +277,17 @@ function renderDayHeader() {
   dayLabelEl.textContent = getDayLabel(state.currentDayIndex);
 }
 
+function isTruckCompletelyFull(truck) {
+  return truck.trips.every((trip) =>
+    trip.slots.every((slot) => slot.orderId !== null)
+  );
+}
+
 function renderTruckList() {
   const day = ensureDayExists(state.currentDayIndex);
   renderDayHeader();
 
+  // oude kaarten weghalen
   truckListEl.querySelectorAll(".truck-card").forEach((el) => el.remove());
 
   day.trucks.forEach((truck, index) => {
@@ -289,22 +296,27 @@ function renderTruckList() {
     card.dataset.truckId = truck.id;
 
     // truck is "vol" als ALLE ritten vol zijn
-    const isFull = truck.trips.every((trip) =>
-      trip.slots.every((slot) => slot.orderId !== null)
-    );
-    if (isFull) {
+    if (isTruckCompletelyFull(truck)) {
       card.classList.add("truck-full");
     }
 
-    const roof = document.createElement("div");
-    roof.className = "truck-roof";
+    // wrapper zodat we nummer kunnen overlappen
+    const inner = document.createElement("div");
+    inner.className = "truck-card-inner";
 
-    const body = document.createElement("div");
-    body.className = "truck-body";
-    body.textContent = index + 1;
+    const img = document.createElement("img");
+    img.src = "truck.png";           // zelfde pad als eerder
+    img.alt = `Truck ${index + 1}`;
+    img.className = "truck-icon";
 
-    card.appendChild(roof);
-    card.appendChild(body);
+    // nummer bovenop de vrachtwagen zelf
+    const numberLabel = document.createElement("div");
+    numberLabel.className = "truck-number-label";
+    numberLabel.textContent = index + 1;
+
+    inner.appendChild(img);
+    inner.appendChild(numberLabel);
+    card.appendChild(inner);
 
     card.addEventListener("click", () => {
       openTruckDetail(truck.id);
@@ -426,7 +438,7 @@ function openTruckDetail(truckId) {
 function renderTrips(truck) {
   if (!slotsContainerEl) return;
 
-  // 1) Huidige scrollpositie bewaren (als er al een scroll-container is)
+  // 1) Huidige scrollpositie bewaren
   let restoreScroll = 0;
   const oldScrollEl = slotsContainerEl.querySelector(".truck-runs-scroll");
   if (oldScrollEl) {
@@ -436,59 +448,67 @@ function renderTrips(truck) {
   // 2) Container leegmaken
   slotsContainerEl.innerHTML = "";
 
-  // 3) NIEUWE scroll-container + wrapper aanmaken
+  // 3) Scroll-container + wrapper
   const scrollEl = document.createElement("div");
   scrollEl.className = "truck-runs-scroll";
 
   const wrapperEl = document.createElement("div");
   wrapperEl.className = "truck-runs-wrapper";
 
+  const truckIsFull = isTruckCompletelyFull(truck);
+
   // 4) Alle ritten opbouwen
   truck.trips.forEach((trip, tripIndex) => {
     const tripEl = document.createElement("div");
     tripEl.className = "truck-run";
 
-    // Header met dak + label
-    const headerEl = document.createElement("div");
-    headerEl.className = "truck-run-header";
+    // === Truck + "Rit X" + overlay voor slots ===
+    const truckWrapper = document.createElement("div");
+    truckWrapper.className = "detail-truck-icon-wrapper";
+    if (truckIsFull) {
+      truckWrapper.classList.add("truck-full");
+    }
 
-    const roof = document.createElement("div");
-    roof.className = "detail-truck-roof";
+    const truckImg = document.createElement("img");
+    truckImg.src = "truck.png"; // zelfde icoon als in agenda
+    truckImg.alt = `Truck – rit ${tripIndex + 1}`;
+    truckImg.className = "detail-truck-icon";
 
-    const frontLabel = document.createElement("div");
-    frontLabel.className = "truck-label-front";
-    frontLabel.textContent =
-      tripIndex === 0 ? "Voorkant" : `Voorkant – rit ${tripIndex + 1}`;
+    // Label "Rit X" in de gele kap
+    const tripLabel = document.createElement("div");
+    tripLabel.className = "trip-label";
+    tripLabel.textContent = `Rit ${tripIndex + 1}`;
 
-    headerEl.appendChild(roof);
-    headerEl.appendChild(frontLabel);
+    // 🔴 Overlay in de trailer waar de grid in valt
+    const overlay = document.createElement("div");
+    overlay.className = "truck-slots-overlay";
 
-    // Slots-grid voor deze rit
+    // Slots-grid voor deze rit (komt IN de overlay, niet meer los eronder)
     const gridEl = document.createElement("div");
     gridEl.className = "slots-grid";
     gridEl.dataset.tripIndex = String(tripIndex);
     renderSlotsForTrip(truck, tripIndex, gridEl);
 
-    // Footer label
-    const backLabel = document.createElement("div");
-    backLabel.className = "truck-run-footer";
-    backLabel.textContent = "Achterkant";
+    overlay.appendChild(gridEl);
 
-    tripEl.appendChild(headerEl);
-    tripEl.appendChild(gridEl);
-    tripEl.appendChild(backLabel);
+    // Opbouw volgorde: afbeelding → overlay → label
+    truckWrapper.appendChild(truckImg);
+    truckWrapper.appendChild(overlay);
+    truckWrapper.appendChild(tripLabel);
+
+    tripEl.appendChild(truckWrapper);
 
     // DELETE BUTTON (alleen tonen als er >1 rit is)
     if (truck.trips.length > 1) {
-    const delBtn = document.createElement("button");
-    delBtn.className = "delete-trip-btn";
-    delBtn.textContent = "Verwijder rit";
+      const delBtn = document.createElement("button");
+      delBtn.className = "delete-trip-btn";
+      delBtn.textContent = "Verwijder rit";
 
-    delBtn.addEventListener("click", () => {
+      delBtn.addEventListener("click", () => {
         showDeleteTripConfirm(tripIndex);
-    });
+      });
 
-    tripEl.appendChild(delBtn);
+      tripEl.appendChild(delBtn);
     }
 
     wrapperEl.appendChild(tripEl);

@@ -1002,3 +1002,142 @@ body {
 .delete-trip-btn:hover {
   filter: brightness(0.92);
 }
+
+/* ====== Agenda: truck icons + nummer ====== */
+
+.truck-icon {
+  width: 60px;
+  height: auto;
+  display: block;
+  margin-top: 10px;
+}
+
+.truck-card {
+  width: 80px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.truck-card-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* nummer IN de truck (agenda) */
+.truck-number-label {
+  position: absolute;
+  bottom: 70px;          /* schuif tot hij mooi in het grijze deel valt */
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.7);
+}
+
+/* Volle trucks rood tintje in agenda */
+.truck-card.truck-full .truck-icon {
+  filter: hue-rotate(-20deg) saturate(2) brightness(1.05);
+}
+
+
+/* ====== Detail: grote truck + “Rit X” + grid in trailer ====== */
+
+.detail-truck-icon-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+/* grote truck-afbeelding in detail scherm */
+.detail-truck-icon {
+  width: 260px;
+  max-width: 80vw;
+  height: auto;
+  display: block;
+}
+
+/* “Rit X” tekst in gele kap */
+.trip-label {
+  position: absolute;
+  top: 6%;              /* tunen voor hoger/lager */
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 25px;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+
+/* ====== GRID IN DE TRUCK (slots) ====== */
+
+/* zone waar de pallet-slots in vallen – deze had je goed staan */
+.truck-slots-overlay {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  /* deze waardes bepalen de positie van de grid in de trailer */
+  top: 24.5%;   /* omhoog/omlaag schuiven voor startpositie */
+  bottom: 2%;   /* marge onderkant */
+  width: 70%;   /* hoe breed de grid in de trailer is */
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  pointer-events: none;  /* overlay zelf niet klikbaar */
+}
+
+/* slots-grid in de trailer */
+.truck-slots-overlay .slots-grid {
+  width: 100%;
+  height: 100%;
+  background: rgba(228, 231, 234, 0.95);  /* licht grijs */
+  border-radius: 16px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: auto;  /* slots zelf klikbaar */
+}
+
+/* rijen vullen de hoogte van de trailer */
+.truck-slots-overlay .slots-row {
+  flex: 1;
+}
+
+/* oude tekstlabels uitschakelen */
+.truck-label-front,
+.truck-label-back {
+  display: none !important;
+}
+
+/* ===== RODE OVERLAY op gevulde trucks ===== */
+
+/* Agenda truck */
+.truck-card.truck-full {
+  position: relative;
+}
+
+.truck-card.truck-full::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(32, 186, 78, 0.55); /* #E14B4B maar dan transparant */
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  border-radius: 12px; 
+
+  width: 70%;      /* hoe breed de trailer is */
+  height: 85%;     /* totale hoogte van de trailer */
+  top: 4%;        /* startpositie */
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Detail truck */
+.detail-truck-icon-wrapper.truck-full {
+  position: relative;
+}
