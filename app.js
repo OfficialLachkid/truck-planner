@@ -1594,12 +1594,53 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// ===== Supabase test =====
+
+async function testSupabaseConnection() {
+  if (typeof supabase === "undefined") {
+    console.error("Supabase client is niet beschikbaar. Klopt je index.html include?");
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("sap_orders")
+      .select(`
+        id,
+        order_code,
+        customer_name,
+        delivery_date,
+        location,
+        postcode,
+        total_pallets,
+        lines:sap_order_lines (
+          article_number,
+          description,
+          boxes,
+          pallets
+        )
+      `)
+      .limit(5);
+
+    if (error) {
+      console.error("Supabase test error:", error);
+    } else {
+      console.log("✅ Supabase verbonden. Eerste orders:", data);
+    }
+  } catch (err) {
+    console.error("Onverwachte Supabase fout:", err);
+  }
+}
+
 // Init
 
 function init() {
   ensureDayExists(0);
   renderTruckList();
   showListView();
+
+  // Test: haal wat orders op uit Supabase
+  testSupabaseConnection();
 }
 
 init();
