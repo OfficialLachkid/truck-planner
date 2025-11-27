@@ -1,3 +1,14 @@
+import { fetchOrderTemplatesForDate } from "./ordersApi.js";
+import {
+  ensureDayRow,
+  loadPlanningForDay,
+  createTruckForDay,
+  createTripForTruck,
+  upsertSlotsBatch,
+} from "./planningApi.js";
+
+let orderTemplates = [];
+
 // Aantal vakken per vrachtwagen (per rit)
 const NUM_SLOTS = 33;
 const SLOTS_PER_ROW = 3;
@@ -122,15 +133,45 @@ function getDayKey(dayIndex) {
   return d.toISOString().slice(0, 10);
 }
 
+function getDayDate(dayIndex) {
+  return createDateByIndex(dayIndex);
+}
+
 // Dag initialiseren
 
-function ensureDayExists(dayIndex) {
+async function ensureDayExists(dayIndex) {
   const key = getDayKey(dayIndex);
-  if (!state.days[key]) {
-    state.days[key] = {
-      trucks: createInitialTrucks(),
-    };
+  if (state.days[key]) return state.days[key];
+
+  const dateObj = getDayDate(dayIndex);             // jouw bestaande helper
+  const dateStr = dateObj.toISOString().slice(0, 10);
+
+  // Haal of maak day-row
+  const dayId = await ensureDayRow(dateStr);
+
+  // Haal planning uit DB
+  const dbTrucks = await loadPlanningForDay(dayId);
+
+  let trucks = [];
+
+  if (dbTrucks.length === 0) {
+    // Nog geen trucks → maak default truck in DB
+    const { truck, trip } = await createTruckForDay(dayId, "Truck 1");
+
+    trucks = [
+      {
+        id: truck.id,         // gebruik uuid overal als id
+        name: truck.name,
+        trips: [createEmptyTripWithDbId(trip.id)],
+        orders: createOrdersForTruck(truck.id),
+      },
+    ];
+  } else {
+    // Map DB-trucks naar huidige state-structuur
+    trucks = dbTrucks.map((t) => mapDbTruckToState(t));
   }
+
+  state.days[key] = { trucks };
   return state.days[key];
 }
 
@@ -156,6 +197,109 @@ function createEmptyTrip() {
   return {
     slots: createEmptySlots(),
   };
+}
+
+function createEmptyTripWithDbId(dbId) {
+  return {
+    id: dbId, // db trip id
+    slots: Array.from({ length: NUM_SLOTS }, () => ({
+      orderId: null,
+      shape: "square",
+    })),
+  };
+}
+
+// maak orders voor een truck op basis van orderTemplates
+function createOrdersForTruck(truckId) {
+  return (orderTemplates || []).map((tpl) => ({
+    id: tpl.id,
+    label: tpl.label,
+    info: tpl.info,
+    truckId,
+    tripIndex: null,
+    occupiedSlots: [],
+    createdAt: tpl.createdAt,
+    postcode: tpl.postcode,
+    location: tpl.location,
+    totalPallets: tpl.totalPallets,
+    lat: tpl.lat,
+    lng: tpl.lng,
+    lines: tpl.lines,
+  }));
+}
+
+// DB-truck → state-truck
+function mapDbTruckToState(dbTruck) {
+  const truckId = dbTruck.id;
+
+  // maak lege trips
+  const trips = dbTruck.trips
+    .sort((a, b) => a.sequence - b.sequence)
+    .map((tripRow) => createEmptyTripWithDbId(tripRow.id));
+
+  // bouw orderMap op o.b.v. slots
+  const orderMap = new Map();
+
+  dbTruck.trips.forEach((tripRow, tripIndex) => {
+    tripRow.slots.forEach((slotRow) => {
+      const trip = trips[tripIndex];
+      const idx = slotRow.index;
+
+      trip.slots[idx].shape = slotRow.shape || "square";
+
+      if (!slotRow.sap_order_id) return;
+
+      const orderTpl = (orderTemplates || []).find(
+        (o) => o.id === slotRow.sap_order_id
+      );
+      if (!orderTpl) return;
+
+      let order = orderMap.get(orderTpl.id);
+      if (!order) {
+        order = {
+          ...orderTpl,
+          truckId,
+          tripIndex,
+          occupiedSlots: [],
+        };
+        orderMap.set(orderTpl.id, order);
+      }
+
+      trip.slots[idx].orderId = order.id;
+      order.occupiedSlots.push(idx);
+      order.tripIndex = tripIndex;
+    });
+  });
+
+    // 1. Geplaatste orders (al in orderMap)
+    const placedOrders = [...orderMap.values()];
+
+    // 2. Vrije orders: alle templates die nog niet in placedOrders zitten
+    const placedIds = new Set(placedOrders.map(o => o.id));
+    const freeOrders = (orderTemplates || [])
+    .filter(tpl => !placedIds.has(tpl.id))
+    .map(tpl => ({
+        id: tpl.id,
+        label: tpl.label,
+        info: tpl.info,
+        truckId,
+        tripIndex: null,
+        occupiedSlots: [],
+        createdAt: tpl.createdAt,
+        postcode: tpl.postcode,
+        location: tpl.location,
+        totalPallets: tpl.totalPallets,
+        lat: tpl.lat,
+        lng: tpl.lng,
+        lines: tpl.lines,
+    }));
+
+    return {
+    id: truckId,
+    name: dbTruck.name,
+    trips,
+    orders: [...placedOrders, ...freeOrders],
+    };
 }
 
 // Dummy order-details met locatie + coördinaten
@@ -203,6 +347,35 @@ function createDummyOrderDetails(orderId, label, info) {
 function createTruck(name) {
   const truckId = nextTruckId++;
 
+  // Als we Supabase-orders hebben geladen, gebruik die
+  if (orderTemplates && orderTemplates.length > 0) {
+    const orders = orderTemplates.map((tpl) => ({
+      // gebruik het id uit Supabase als order-id
+      id: tpl.id,
+      label: tpl.label,
+      info: tpl.info,
+      truckId,
+      tripIndex: null,
+      occupiedSlots: [],
+      createdAt: tpl.createdAt,
+      postcode: tpl.postcode,
+      location: tpl.location,
+      totalPallets: tpl.totalPallets,
+      lat: tpl.lat,
+      lng: tpl.lng,
+      lines: tpl.lines,
+    }));
+
+    return {
+      id: truckId,
+      name,
+      trips: [createEmptyTrip()],
+      orders,
+    };
+  }
+
+  // Fallback: oude dummy-orders als Supabase nog niets teruggeeft
+  console.warn("Geen orderTemplates geladen, gebruik dummy-orders.");
   const baseOrders = [
     { label: "Order A", info: "Klant X" },
     { label: "Order B", info: "Klant Y" },
@@ -224,8 +397,8 @@ function createTruck(name) {
       label: tpl.label,
       info: tpl.info,
       truckId,
-      tripIndex: null, // aan welke rit is deze order gekoppeld?
-      occupiedSlots: [], // indices binnen die rit
+      tripIndex: null,
+      occupiedSlots: [],
       createdAt: details.createdAt,
       postcode: details.postcode,
       location: details.location,
@@ -239,7 +412,7 @@ function createTruck(name) {
   return {
     id: truckId,
     name,
-    trips: [createEmptyTrip()], // minstens 1 rit
+    trips: [createEmptyTrip()],
     orders,
   };
 }
@@ -283,8 +456,8 @@ function isTruckCompletelyFull(truck) {
   );
 }
 
-function renderTruckList() {
-  const day = ensureDayExists(state.currentDayIndex);
+async function renderTruckList() {
+  const day = await ensureDayExists(state.currentDayIndex);
   renderDayHeader();
 
   // oude kaarten weghalen
@@ -295,21 +468,18 @@ function renderTruckList() {
     card.className = "truck-card";
     card.dataset.truckId = truck.id;
 
-    // truck is "vol" als ALLE ritten vol zijn
     if (isTruckCompletelyFull(truck)) {
       card.classList.add("truck-full");
     }
 
-    // wrapper zodat we nummer kunnen overlappen
     const inner = document.createElement("div");
     inner.className = "truck-card-inner";
 
     const img = document.createElement("img");
-    img.src = "truck.png";           // zelfde pad als eerder
+    img.src = "truck.png";
     img.alt = `Truck ${index + 1}`;
     img.className = "truck-icon";
 
-    // nummer bovenop de vrachtwagen zelf
     const numberLabel = document.createElement("div");
     numberLabel.className = "truck-number-label";
     numberLabel.textContent = index + 1;
@@ -535,13 +705,21 @@ function renderTrips(truck) {
 }
 
 // Een rit toevoegen aan de geselecteerde truck
-function addTripForSelectedTruck() {
+async function addTripForSelectedTruck() {
   const truck = getTruckById(state.selectedTruckId);
   if (!truck) return;
 
-  truck.trips.push(createEmptyTrip());
+  // sequence is het huidige aantal trips
+  const sequence = truck.trips.length;
+
+  // 1) Nieuwe trip in DB
+  const tripRow = await createTripForTruck(truck.id, sequence);
+
+  // 2) Nieuwe trip in state met DB-id
+  truck.trips.push(createEmptyTripWithDbId(tripRow.id));
   renderTrips(truck);
 
+  // 3) Scroll naar nieuwe rit
   const scrollEl = slotsContainerEl.querySelector(".truck-runs-scroll");
   const runs = scrollEl ? scrollEl.querySelectorAll(".truck-run") : [];
   if (scrollEl && runs.length) {
@@ -1223,6 +1401,21 @@ function placeOrderInAdjacentSlots(truck, tripIndex, order, startIndex, count) {
   return true;
 }
 
+async function persistOrderPlacement(truck, tripIndex, order, slotIndices) {
+  const trip = truck.trips[tripIndex];
+  const tripId = trip.id;
+  if (!tripId) return;
+
+  const rows = slotIndices.map((idx) => ({
+    trip_id: tripId,
+    index: idx,
+    shape: trip.slots[idx].shape || "square",
+    sap_order_id: order.id,
+  }));
+
+  await upsertSlotsBatch(rows);
+}
+
 // Bepaal hoeveel pallets er maximaal geplaatst kunnen worden
 // vanaf een startIndex, volgens dezelfde regels als placeOrderInAdjacentSlots.
 function calculateMaxPalletsFromSlot(truck, tripIndex, startIndex) {
@@ -1415,32 +1608,52 @@ function deleteCurrentTruck() {
 
 // Event listeners
 
-prevDayBtn.addEventListener("click", () => {
+prevDayBtn.addEventListener("click", async () => {
   state.currentDayIndex -= 1;
   state.selectedTruckId = null;
   state.selectedOrderId = null;
-  ensureDayExists(state.currentDayIndex);
+
+  await renderTruckList();
   showListView();
-  renderTruckList();
   playSwipeIn(truckListView, "right");
 });
 
-nextDayBtn.addEventListener("click", () => {
+nextDayBtn.addEventListener("click", async () => {
   state.currentDayIndex += 1;
   state.selectedTruckId = null;
   state.selectedOrderId = null;
-  ensureDayExists(state.currentDayIndex);
+
+  await renderTruckList();
   showListView();
-  renderTruckList();
   playSwipeIn(truckListView, "left");
 });
 
-addTruckBtn.addEventListener("click", () => {
-  const day = ensureDayExists(state.currentDayIndex);
+addTruckBtn.addEventListener("click", async () => {
+  // 1) Zorg dat de dag in DB bestaat
+  const dateObj = getDayDate(state.currentDayIndex);
+  const dateStr = dateObj.toISOString().slice(0, 10);
+  const dayId = await ensureDayRow(dateStr);
+
+  // 2) Huidige day uit state ophalen (of initialiseren)
+  const day = await ensureDayExists(state.currentDayIndex);
   const truckNumber = day.trucks.length + 1;
-  const newTruck = createTruck(`Truck ${truckNumber}`);
-  day.trucks.push(newTruck);
-  renderTruckList();
+
+  // 3) Truck + eerste trip in DB maken
+  const { truck, trip } = await createTruckForDay(
+    dayId,
+    `Truck ${truckNumber}`
+  );
+
+  // 4) Deze DB-truck mappen naar je state-structuur
+  const stateTruck = {
+    id: truck.id,
+    name: truck.name,
+    trips: [createEmptyTripWithDbId(trip.id)],
+    orders: createOrdersForTruck(truck.id),
+  };
+
+  day.trucks.push(stateTruck);
+  await renderTruckList();
 });
 
 backToListBtn.addEventListener("click", () => {
@@ -1517,7 +1730,7 @@ slotCountCancel.addEventListener("click", () => {
 
 slotCountConfirm.addEventListener("click", handleSlotCountConfirm);
 
-function handleSlotCountConfirm() {
+async function handleSlotCountConfirm() {
   if (!state.pendingPlacement) {
     closeSlotCountOverlay();
     return;
@@ -1545,12 +1758,21 @@ function handleSlotCountConfirm() {
     startSlotIndex,
     validCount
   );
-  if (ok) {
-    closeSlotCountOverlay();
-    renderTrips(truck);
-    renderOrders(truck);
-    animateSlots(tripIndex, order.occupiedSlots, "slot-placed", 450);
-  }
+
+    if (ok) {
+        // eerst UI updaten
+        closeSlotCountOverlay();
+        renderTrips(truck);
+        renderOrders(truck);
+        animateSlots(tripIndex, order.occupiedSlots, "slot-placed", 450);
+
+        // daarna Supabase opslaan, zonder de UI te blokkeren
+        persistOrderPlacement(truck, tripIndex, order, order.occupiedSlots)
+        .catch((err) => {
+        console.error("Fout bij opslaan in Supabase:", err);
+        // eventueel nog een toast / melding laten zien
+        });
+    }
 }
 
 document.addEventListener("click", (e) => {
@@ -1596,51 +1818,53 @@ document.addEventListener("keydown", (e) => {
 
 // ===== Supabase test =====
 
-async function testSupabaseConnection() {
-  if (typeof supabase === "undefined") {
-    console.error("Supabase client is niet beschikbaar. Klopt je index.html include?");
-    return;
-  }
+// async function testSupabaseConnection() {
+//   if (typeof supabase === "undefined") {
+//     console.error("Supabase client is niet beschikbaar. Klopt je index.html include?");
+//     return;
+//   }
 
-  try {
-    const { data, error } = await supabase
-      .from("sap_orders")
-      .select(`
-        id,
-        order_code,
-        customer_name,
-        delivery_date,
-        location,
-        postcode,
-        total_pallets,
-        lines:sap_order_lines (
-          article_number,
-          description,
-          boxes,
-          pallets
-        )
-      `)
-      .limit(5);
+//   try {
+//     const { data, error } = await supabase
+//       .from("sap_orders")
+//       .select(`
+//         id,
+//         order_code,
+//         customer_name,
+//         delivery_date,
+//         location,
+//         postcode,
+//         total_pallets,
+//         lines:sap_order_lines (
+//           article_number,
+//           description,
+//           boxes,
+//           pallets
+//         )
+//       `)
+//       .limit(5);
 
-    if (error) {
-      console.error("Supabase test error:", error);
-    } else {
-      console.log("✅ Supabase verbonden. Eerste orders:", data);
-    }
-  } catch (err) {
-    console.error("Onverwachte Supabase fout:", err);
-  }
-}
+//     if (error) {
+//       console.error("Supabase test error:", error);
+//     } else {
+//       console.log("✅ Supabase verbonden. Eerste orders:", data);
+//     }
+//   } catch (err) {
+//     console.error("Onverwachte Supabase fout:", err);
+//   }
+// }
 
 // Init
 
-function init() {
-  ensureDayExists(0);
-  renderTruckList();
-  showListView();
+async function init() {
+  const dayDate = getDayDate(0);
+  const dateKey = dayDate.toISOString().slice(0, 10);
 
-  // Test: haal wat orders op uit Supabase
-  testSupabaseConnection();
+  orderTemplates = await fetchOrderTemplatesForDate(dateKey);
+
+  await ensureDayExists(0);
+  await renderTruckList();
+  showListView();
 }
 
 init();

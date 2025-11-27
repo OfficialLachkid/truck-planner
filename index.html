@@ -225,12 +225,12 @@
     <div class="shape-options">
       <button id="shape-square-btn" class="shape-option">
         <div class="shape-demo shape-demo-square"></div>
-        <span>Vierkant</span>
+        <span>Euro</span>
       </button>
 
       <button id="shape-rect-btn" class="shape-option">
         <div class="shape-demo shape-demo-rect"></div>
-        <span>Rechthoek</span>
+        <span>Blok</span>
       </button>
     </div>
 
@@ -240,28 +240,17 @@
   </div>
 </div>
 
+    <!-- Leaflet JS -->
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+        ></script>
 
-  <!-- Leaflet JS -->
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+        <!-- Supabase JS lib -->
+        <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
-  <!-- Supabase client -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script>
-    const SUPABASE_URL = "https://gufumobzgngpiqzracbv.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1ZnVtb2J6Z25ncGlxenJhY2J2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMTg3NTUsImV4cCI6MjA3OTY5NDc1NX0.VR0D8yGE-7wuNbwrnft4JKeW1pKhVro7ADKiM2UPuks";
-
-    // globale Supabase client (beschikbaar in app.js)
-    const supabase = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY
-    );
-  </script>
-
-  <!-- Jouw app-code -->
-  <script src="app.js"></script>
+        <!-- Jouw app startpunt -->
+    <script type="module" src="app.js"></script>
 </body>
 </html>
