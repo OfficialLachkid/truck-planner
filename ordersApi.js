@@ -30,7 +30,8 @@ export async function fetchOrderTemplatesForDate(dateStr) {
         pallets
       )
     `)
-    .eq("delivery_date", dateStr)
+    // .eq("delivery_date", dateStr) // Temporarily disabled date filter for testing
+    .order("delivery_date")
     .order("order_code");
 
   if (error) {
