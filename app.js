@@ -1309,7 +1309,7 @@ function showMap() {
   const defaultBtn = document.createElement("button");
   defaultBtn.className = "map-trip-tab";
   defaultBtn.dataset.mode = "default";
-  defaultBtn.textContent = "Basisroute";
+  defaultBtn.textContent = "Default";
 
   defaultBtn.style.flex = "1";
   defaultBtn.style.padding = "6px 8px";
