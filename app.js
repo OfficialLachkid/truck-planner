@@ -1,10 +1,12 @@
 import { fetchOrderTemplatesForDate } from "./ordersApi.js";
+import { CITY_COORDS } from "./locationCoords.js";
 import {
   ensureDayRow,
   loadPlanningForDay,
   createTruckForDay,
   createTripForTruck,
   upsertSlotsBatch,
+  deleteTrip,
 } from "./planningApi.js";
 
 let orderTemplates = [];
@@ -18,15 +20,6 @@ const START_LOCATION = {
   lat: 52.3508, // Almere in jouw voorbeeld
   lng: 5.2647,
   label: "Start: Almere – Wittevrouwen 1",
-};
-
-// Dummy coördinaten per stad (kan later echte geocoding worden)
-const CITY_COORDS = {
-  Amsterdam: { lat: 52.3728, lng: 4.8936 },
-  Rotterdam: { lat: 51.9225, lng: 4.4792 },
-  Utrecht: { lat: 52.0907, lng: 5.1214 },
-  Eindhoven: { lat: 51.4416, lng: 5.4697 },
-  "Den Haag": { lat: 52.0705, lng: 4.3007 },
 };
 
 // Globale state
@@ -735,7 +728,7 @@ async function addTripForSelectedTruck() {
 }
 
 // Rit verwijderen uit geselecteerde truck
-function deleteTripForSelectedTruck(tripIndex) {
+async function deleteTripForSelectedTruck(tripIndex) {
   const truck = getTruckById(state.selectedTruckId);
   if (!truck) return;
 
@@ -745,19 +738,34 @@ function deleteTripForSelectedTruck(tripIndex) {
   }
 
   // Check of er orders in zitten
-  const hasOrders = truck.orders.some(o => o.tripIndex === tripIndex);
+  const hasOrders = truck.orders.some(
+    (o) => o.tripIndex === tripIndex && o.occupiedSlots && o.occupiedSlots.length > 0
+  );
 
   if (hasOrders) {
     alert("Deze rit bevat geplaatste orders. Verwijder eerst alle pallets.");
     return;
   }
 
-  // Verwijderen
-  truck.trips.splice(tripIndex, 1);
+  const trip = truck.trips[tripIndex];
+  if (!trip || !trip.id) {
+    console.error("Geen geldige trip-id gevonden voor verwijdering:", trip);
+    return;
+  }
 
-  // indexen herstellen voor orders maar er zijn geen orders meer, dus safe
+  try {
+    // 1) Verwijder uit database
+    await deleteTrip(trip.id);
 
-  renderTrips(truck);
+    // 2) Uit lokale state
+    truck.trips.splice(tripIndex, 1);
+
+    // 3) Opnieuw renderen
+    renderTrips(truck);
+  } catch (err) {
+    console.error("Kon rit niet verwijderen:", err);
+    alert("Er ging iets mis bij het verwijderen van deze rit in de database.");
+  }
 }
 
 // Slots / orders renderen per rit
@@ -1525,9 +1533,8 @@ function hideDeleteTripConfirm() {
 }
 
 document.getElementById("delete-trip-no").addEventListener("click", hideDeleteTripConfirm);
-document.getElementById("delete-trip-yes").addEventListener("click", () => {
-  const truck = getTruckById(state.selectedTruckId);
-  deleteTripForSelectedTruck(pendingTripDeleteIndex);
+document.getElementById("delete-trip-yes").addEventListener("click", async () => {
+  await deleteTripForSelectedTruck(pendingTripDeleteIndex);
   hideDeleteTripConfirm();
 });
 
