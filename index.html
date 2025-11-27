@@ -153,66 +153,60 @@
       </div>
     </div>
 
-    <!-- OVERLAY: Aantal pallet-plekken voor order -->
-    <div id="slot-count-overlay" class="slot-count-overlay hidden">
-      <div class="slot-count-card">
-        <div class="slot-count-title">Aantal pallets</div>
-        <div class="slot-count-sub">
-          Kies hoeveel pallet-plekken deze order moet innemen (aaneengesloten
-          vakken vanaf de gekozen positie).
-        </div>
-
-        <!-- ⬇ NIEUW: hint met maximale pallets -->
-        <div id="slot-count-max" class="slot-count-max-hint"></div>
-
-        <div class="slot-count-input-row">
-          <button
-            id="slot-count-decrease"
-            class="slot-count-step"
-            type="button"
-          >
-            −
-          </button>
-          <input
-            id="slot-count-input"
-            type="number"
-            min="1"
-            value="1"
-            inputmode="numeric"
-          />
-          <button
-            id="slot-count-increase"
-            class="slot-count-step"
-            type="button"
-          >
-            +
-          </button>
-        </div>
-
-        <div class="slot-count-actions">
-          <button
-            id="slot-count-cancel"
-            class="slot-count-cancel"
-            type="button"
-          >
-            Annuleer
-          </button>
-          <button
-            id="slot-count-confirm"
-            class="slot-count-confirm"
-            type="button"
-          >
-            Bevestig
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- SLOT COUNT OVERLAY -->
 <div id="slot-count-overlay" class="slot-count-overlay hidden">
   <div class="slot-count-card">
-    ... inhoud van pallet overlay ...
+
+    <!-- Titel + subtitel -->
+    <div class="slot-count-title">Aantal pallets</div>
+    <div class="slot-count-sub">
+      Kies hoeveel pallet-plekken deze order moet innemen
+      (aaneengesloten vakken vanaf de gekozen positie).
+    </div>
+
+    <!-- Max hint tekst -->
+    <div id="slot-count-max" class="slot-count-max-hint"></div>
+
+    <!-- NIEUW: Max-knop boven rechts -->
+    <div class="slot-count-max-row">
+      <button
+        id="slot-count-max-btn"
+        class="slot-count-max-btn"
+        type="button"
+      >
+        Max
+      </button>
+    </div>
+
+    <!-- Invoerveld + + en – -->
+    <div class="slot-count-input-row">
+      <button id="slot-count-decrease" class="slot-count-step" type="button">
+        −
+      </button>
+
+      <input
+        id="slot-count-input"
+        type="number"
+        min="1"
+        value="1"
+        inputmode="numeric"
+      />
+
+      <button id="slot-count-increase" class="slot-count-step" type="button">
+        +
+      </button>
+    </div>
+
+    <!-- Acties -->
+    <div class="slot-count-actions">
+      <button id="slot-count-cancel" class="slot-count-cancel" type="button">
+        Annuleer
+      </button>
+      <button id="slot-count-confirm" class="slot-count-confirm" type="button">
+        Bevestig
+      </button>
+    </div>
+
   </div>
 </div>
 

@@ -520,6 +520,51 @@ body {
   pointer-events: auto;
 }
 
+/* bestaande step-knoppen werken nu ook in de column */
+.slot-count-step {
+  width: 56px;
+  border: none;
+  background: #f9fafb;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* rij voor de losse Max-knop, uitgelijnd aan de rechterkant */
+.slot-count-max-row {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* grote rode Max-knop */
+.slot-count-max-btn {
+  background: #ef4444;
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* disabled state (als max <= 1) */
+.slot-count-max-btn:disabled,
+.slot-count-max-btn.slot-count-max-btn-disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* iets minder klikbaar als max <= 1 */
+.slot-count-max-btn:disabled,
+.slot-count-max-btn.slot-count-max-btn-disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .order-detail-card,
 .map-card {
   background: #ffffff;

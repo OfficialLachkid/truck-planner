@@ -41,6 +41,8 @@ const state = {
 
 // welke rit is actief in de kaart-overlay
 let activeMapTripIndex = 0;
+// nieuw: welke tab is actief: 'default' (basisroute) of 'trip'
+let activeMapTabType = "default";
 
 // DOM referenties
 const truckListView = document.getElementById("truck-list-view");
@@ -91,6 +93,7 @@ const slotCountConfirm = document.getElementById("slot-count-confirm");
 
 // hint-element voor max pallets
 const slotCountMaxHint = document.getElementById("slot-count-max");
+const slotCountMaxBtn = document.getElementById("slot-count-max-btn");
 
 // Shape-selectie overlay
 const shapeOverlay = document.getElementById("shape-overlay");
@@ -908,6 +911,226 @@ function buildRouteStops(truck, tripIndex) {
   return loaded;
 }
 
+// ======= DEFAULT ROUTE HELPERS (voor alle orders per truck) =======
+
+// Haversine afstand in km tussen twee punten
+function distanceKm(a, b) {
+  const R = 6371; // aarde in km
+  const toRad = (deg) => (deg * Math.PI) / 180;
+
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+
+  const h =
+    sinDLat * sinDLat +
+    Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+
+  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return R * c;
+}
+
+// Alle stops voor de default route (alle orders, geplaatst of niet)
+function buildDefaultRouteStops(truck) {
+  if (!truck || !Array.isArray(truck.orders)) return [];
+
+  return truck.orders
+    .filter((o) => o && o.lat != null && o.lng != null)
+    .map((o) => ({
+      id: o.id,
+      label: o.label,
+      location: o.location,
+      lat: o.lat,
+      lng: o.lng,
+      // gebruik aantal pallets als we het weten; anders 1
+      palletCount:
+        (o.occupiedSlots && o.occupiedSlots.length) ||
+        o.totalPallets ||
+        1,
+    }));
+}
+
+// Nearest-neighbor route vanaf startpunt
+function nearestNeighborRoute(startPoint, stops) {
+  const remaining = [...stops];
+  const route = [];
+  let current = startPoint;
+
+  while (remaining.length > 0) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const d = distanceKm(current, remaining[i]);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+
+    const next = remaining.splice(bestIdx, 1)[0];
+    route.push(next);
+    current = next;
+  }
+
+  return route;
+}
+
+// 2-opt verbetering bovenop nearest-neighbor
+function twoOptImprove(route, startPoint) {
+  let improved = true;
+  let bestRoute = [...route];
+  const n = bestRoute.length;
+
+  if (n < 4) return bestRoute;
+
+  const dist = (p, q) => distanceKm(p, q);
+
+  while (improved) {
+    improved = false;
+
+    for (let i = 0; i < n - 2; i++) {
+      for (let k = i + 1; k < n - 1; k++) {
+        // a-b-...-c-d → kijk of we segment i..k willen omdraaien
+        const a = i === 0 ? startPoint : bestRoute[i - 1];
+        const b = bestRoute[i];
+        const c = bestRoute[k];
+        const d = bestRoute[k + 1];
+
+        const current =
+          dist(a, b) + dist(c, d);
+        const candidate =
+          dist(a, c) + dist(b, d);
+
+        if (candidate + 1e-6 < current) {
+          // segment i..k omdraaien
+          const reversed = bestRoute.slice(i, k + 1).reverse();
+          bestRoute = [
+            ...bestRoute.slice(0, i),
+            ...reversed,
+            ...bestRoute.slice(k + 1),
+          ];
+          improved = true;
+        }
+      }
+    }
+  }
+
+  return bestRoute;
+}
+
+// Combineer NN + 2-opt voor nette default route
+function computeOptimizedDefaultRoute(stops) {
+  if (!stops.length) return [];
+
+  const origin = { lat: START_LOCATION.lat, lng: START_LOCATION.lng };
+  const nnRoute = nearestNeighborRoute(origin, stops);
+  return twoOptImprove(nnRoute, origin);
+}
+
+// Teken default route (alle orders) op de kaart
+function renderDefaultRouteOnMap(truck) {
+  if (!nlMap || !routeLayer) return;
+
+  routeLayer.clearLayers();
+
+  const baseStops = buildDefaultRouteStops(truck);
+  if (!baseStops.length) {
+    // Geen stops → focus gewoon op startlocatie
+    nlMap.setView([START_LOCATION.lat, START_LOCATION.lng], 6);
+    return;
+  }
+
+  const routeStops = computeOptimizedDefaultRoute(baseStops);
+
+  const points = [];
+  const startLatLng = [START_LOCATION.lat, START_LOCATION.lng];
+
+  const homeIcon = L.divIcon({
+    className: "route-marker",
+    html: `<div class="route-marker-inner home">🏠</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+
+  const startMarker = L.marker(startLatLng, { icon: homeIcon }).bindPopup(
+    START_LOCATION.label
+  );
+  routeLayer.addLayer(startMarker);
+  points.push(startLatLng);
+
+  // Groepeer markers per coördinaat zodat meerdere orders in dezelfde stad netjes samenkomen
+  const markerGroups = new Map();
+
+  routeStops.forEach((stop, index) => {
+    const key = `${stop.lat.toFixed(5)},${stop.lng.toFixed(5)}`;
+    let group = markerGroups.get(key);
+    if (!group) {
+      group = {
+        lat: stop.lat,
+        lng: stop.lng,
+        location: stop.location || stop.label,
+        items: [],
+      };
+      markerGroups.set(key, group);
+    }
+    group.items.push({
+      label: stop.label,
+      orderIndex: index + 1,
+      palletCount: stop.palletCount || 1,
+    });
+  });
+
+  // Polyline volgorde: start → elke unieke marker in routevolgorde
+  const seenPointKeys = new Set();
+  routeStops.forEach((stop) => {
+    const key = `${stop.lat.toFixed(5)},${stop.lng.toFixed(5)}`;
+    if (!seenPointKeys.has(key)) {
+      seenPointKeys.add(key);
+      points.push([stop.lat, stop.lng]);
+    }
+  });
+
+  markerGroups.forEach((group) => {
+    const lines = group.items.map(
+      (item) =>
+        `${item.label} – ${item.palletCount} pallets (volgorde ${item.orderIndex})`
+    );
+    const popupHtml = `<strong>${group.location}</strong><br>${lines.join(
+      "<br>"
+    )}`;
+
+    const orderNumber = Math.min(...group.items.map((i) => i.orderIndex));
+    const icon = L.divIcon({
+      className: "route-marker",
+      html: `<div class="route-marker-inner">${orderNumber}</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+    });
+
+    const marker = L.marker([group.lat, group.lng], { icon }).bindPopup(
+      popupHtml
+    );
+    routeLayer.addLayer(marker);
+  });
+
+  if (points.length > 1) {
+    const poly = L.polyline(points, {
+      color: "#2b6cb0",
+      weight: 4,
+      opacity: 0.85,
+    });
+    routeLayer.addLayer(poly);
+    nlMap.fitBounds(poly.getBounds(), { padding: [30, 30] });
+  } else {
+    nlMap.setView([START_LOCATION.lat, START_LOCATION.lng], 6);
+  }
+}
+
 function ensureMapInstance() {
   if (!nlMap && typeof L !== "undefined") {
     nlMap = L.map("nl-map").setView([52.1, 5.3], 7);
@@ -1028,6 +1251,27 @@ function getDefaultMapTripIndex(truck) {
   return idxWithOrders !== -1 ? idxWithOrders : 0;
 }
 
+// kleine helper om tab-styling te zetten
+function setActiveMapTab(tabsContainer, mode, tripIndex) {
+  activeMapTabType = mode;
+  if (mode === "trip" && typeof tripIndex === "number") {
+    activeMapTripIndex = tripIndex;
+  }
+
+  Array.from(tabsContainer.querySelectorAll(".map-trip-tab")).forEach(
+    (btn) => {
+      const btnMode = btn.dataset.mode || "trip";
+      const btnTripIndex = Number(btn.dataset.tripIndex || "0");
+      const isActive =
+        btnMode === mode &&
+        (btnMode === "default" || btnTripIndex === activeMapTripIndex);
+
+      btn.style.background = isActive ? "#111827" : "#f9fafb";
+      btn.style.color = isActive ? "#ffffff" : "#111827";
+    }
+  );
+}
+
 function showMap() {
   const truck = getTruckById(state.selectedTruckId);
   if (!truck) return;
@@ -1046,58 +1290,76 @@ function showMap() {
     tabsContainer = document.createElement("div");
     tabsContainer.id = "map-trip-tabs";
     tabsContainer.className = "map-trip-tabs";
+
     // simpele styling (inline)
     tabsContainer.style.display = "flex";
     tabsContainer.style.gap = "6px";
     tabsContainer.style.margin = "8px 0 6px";
+
     titleEl.insertAdjacentElement("afterend", tabsContainer);
   }
 
   tabsContainer.innerHTML = "";
 
-  if (
-    typeof activeMapTripIndex !== "number" ||
-    activeMapTripIndex >= truck.trips.length
-  ) {
-    activeMapTripIndex = getDefaultMapTripIndex(truck);
-  }
+  // default: we starten op basisroute
+  activeMapTabType = "default";
+  activeMapTripIndex = getDefaultMapTripIndex(truck);
 
-  // Tabs opbouwen: [Rit 1] [Rit 2] ...
+  // === Basisroute tab ===
+  const defaultBtn = document.createElement("button");
+  defaultBtn.className = "map-trip-tab";
+  defaultBtn.dataset.mode = "default";
+  defaultBtn.textContent = "Basisroute";
+
+  defaultBtn.style.flex = "1";
+  defaultBtn.style.padding = "6px 8px";
+  defaultBtn.style.borderRadius = "999px";
+  defaultBtn.style.border = "1px solid #d1d5db";
+  defaultBtn.style.fontSize = "0.8rem";
+  defaultBtn.style.cursor = "pointer";
+
+  defaultBtn.addEventListener("click", () => {
+    setActiveMapTab(tabsContainer, "default");
+    renderDefaultRouteOnMap(truck);
+  });
+
+  tabsContainer.appendChild(defaultBtn);
+
+  // === Tabs voor elke rit ===
   truck.trips.forEach((_, tripIndex) => {
     const btn = document.createElement("button");
     btn.className = "map-trip-tab";
+    btn.dataset.mode = "trip";
     btn.dataset.tripIndex = String(tripIndex);
     btn.textContent = `Rit ${tripIndex + 1}`;
 
-    // basis styling voor segmented feel
     btn.style.flex = "1";
     btn.style.padding = "6px 8px";
     btn.style.borderRadius = "999px";
     btn.style.border = "1px solid #d1d5db";
-    btn.style.background =
-      tripIndex === activeMapTripIndex ? "#111827" : "#f9fafb";
-    btn.style.color = tripIndex === activeMapTripIndex ? "#ffffff" : "#111827";
     btn.style.fontSize = "0.8rem";
     btn.style.cursor = "pointer";
 
     btn.addEventListener("click", () => {
-      activeMapTripIndex = tripIndex;
-      // actieve style updaten
-      Array.from(tabsContainer.querySelectorAll(".map-trip-tab")).forEach(
-        (other) => {
-          const tIdx = Number(other.dataset.tripIndex || "0");
-          const isActive = tIdx === activeMapTripIndex;
-          other.style.background = isActive ? "#111827" : "#f9fafb";
-          other.style.color = isActive ? "#ffffff" : "#111827";
-        }
-      );
-      renderTripOnMap(truck, activeMapTripIndex);
+      setActiveMapTab(tabsContainer, "trip", tripIndex);
+      renderTripOnMap(truck, tripIndex);
     });
 
     tabsContainer.appendChild(btn);
   });
 
-  renderTripOnMap(truck, activeMapTripIndex);
+  // Actieve tab + route tekenen
+  setActiveMapTab(
+    tabsContainer,
+    activeMapTabType,
+    activeMapTripIndex
+  );
+
+  if (activeMapTabType === "default") {
+    renderDefaultRouteOnMap(truck);
+  } else {
+    renderTripOnMap(truck, activeMapTripIndex);
+  }
 }
 
 function hideMap() {
@@ -1113,25 +1375,38 @@ function openSlotCountOverlay(truckId, tripIndex, orderId, startSlotIndex) {
   slotCountOverlay.classList.remove("hidden");
   slotCountOverlay.classList.add("overlay-open");
 
-  // ⬇ Focus direct op het invoerveld + selecteer huidige waarde
+  // Focus/select
   if (slotCountInput) {
     slotCountInput.focus();
     slotCountInput.select();
   }
 
-  // ⬇ Maximaal aantal pallets berekenen en tonen
+  // Max bepalen
   const truck = getTruckById(truckId);
-  if (truck && typeof calculateMaxPalletsFromSlot === "function") {
-    const max = calculateMaxPalletsFromSlot(truck, tripIndex, startSlotIndex);
+  let max = 0;
 
-    if (slotCountMaxHint) {
-      if (max === 0) {
-        slotCountMaxHint.textContent =
-          "Op deze positie zijn geen vrije pallet-plekken beschikbaar.";
-      } else {
-        slotCountMaxHint.textContent =
-          `Maximaal ${max} pallet-plek${max > 1 ? "ken" : ""} vanaf deze positie.`;
-      }
+  if (truck && typeof calculateMaxPalletsFromSlot === "function") {
+    max = calculateMaxPalletsFromSlot(truck, tripIndex, startSlotIndex);
+  }
+
+  // Hint update
+  if (slotCountMaxHint) {
+    slotCountMaxHint.textContent =
+      max === 0
+        ? "Op deze positie zijn geen vrije pallet-plekken beschikbaar."
+        : `Maximaal ${max} pallet-plek${max > 1 ? "ken" : ""} vanaf deze positie.`;
+  }
+
+  // Max button
+  if (slotCountMaxBtn) {
+    slotCountMaxBtn.dataset.max = String(max);
+
+    if (max <= 1) {
+      slotCountMaxBtn.disabled = true;
+      slotCountMaxBtn.classList.add("slot-count-max-btn-disabled");
+    } else {
+      slotCountMaxBtn.disabled = false;
+      slotCountMaxBtn.classList.remove("slot-count-max-btn-disabled");
     }
   }
 }
@@ -1723,6 +1998,17 @@ slotCountIncrease.addEventListener("click", () => {
   value = Math.max(1, value + 1);
   slotCountInput.value = String(value);
 });
+
+if (slotCountMaxBtn) {
+  slotCountMaxBtn.addEventListener("click", () => {
+    const max = parseInt(slotCountMaxBtn.dataset.max || "0", 10);
+    if (max > 0) {
+      slotCountInput.value = String(max);
+      slotCountInput.focus();
+      slotCountInput.select();
+    }
+  });
+}
 
 slotCountCancel.addEventListener("click", () => {
   closeSlotCountOverlay();
