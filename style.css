@@ -891,18 +891,22 @@ body {
 }
 
 .shape-demo {
-  background: #22c55e;
   border-radius: 10px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .shape-demo-square {
-  width: 40px;
-  height: 32px;
+  width: 55px;
+  height: 70px;
+  background-image: url("euro_pallet_icon.png");
 }
 
 .shape-demo-rect {
   width: 70px;
-  height: 32px;
+  height: 70px;
+  background-image: url("blok_pallet_icon.png");
 }
 
 .shape-actions {
