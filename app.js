@@ -791,24 +791,48 @@ function renderSlotsForTrip(truck, tripIndex, gridEl) {
       (left && left.shape === "rect") || (right && right.shape === "rect");
 
     const createSlotEl = (slotObj, idx) => {
-      const slotEl = document.createElement("div");
-      slotEl.classList.add("slot", slotObj.shape === "rect" ? "rect" : "square");
-      slotEl.dataset.index = idx;
+    const slotEl = document.createElement("div");
+    slotEl.classList.add("slot", slotObj.shape === "rect" ? "rect" : "square");
+    slotEl.dataset.index = idx;
 
-      if (slotObj.orderId === null) {
+    if (slotObj.orderId === null) {
+        // Leeg vak
         slotEl.classList.add("empty");
-      } else {
+    } else {
+        // Gevuld vak → icoon + label
         slotEl.classList.add("filled");
+
         const order = truck.orders.find((o) => o.id === slotObj.orderId);
-        slotEl.textContent = order ? order.label.replace("Order ", "") : "?";
-      }
 
-      slotEl.addEventListener("click", () => {
+        // wrapper binnen het slot
+        const content = document.createElement("div");
+        content.className = "slot-content";
+
+        // pallet-icoon
+        const icon = document.createElement("div");
+        icon.classList.add("pallet-icon");
+        // Als je later een andere icon voor blok wilt:
+        // icon.classList.add(slotObj.shape === "rect" ? "pallet-blok" : "pallet-euro");
+
+        // label met ordercode
+        const label = document.createElement("span");
+        label.className = "slot-label";
+        label.textContent = order
+        ? order.label.replace("Order ", "")
+        : "?";
+
+        content.appendChild(icon);
+        content.appendChild(label);
+        slotEl.appendChild(content);
+    }
+
+    slotEl.addEventListener("click", () => {
         handleSlotClick(truck, tripIndex, idx);
-      });
+    });
 
-      return slotEl;
+    return slotEl;
     };
+
 
     if (left) rowDiv.appendChild(createSlotEl(left, leftIdx));
     if (!rowHasRect && mid) rowDiv.appendChild(createSlotEl(mid, midIdx));
