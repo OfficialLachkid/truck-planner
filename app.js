@@ -4,7 +4,9 @@ import {
   loadPlanningForDay,
   createTruckForDay,
   createTripForTruck,
-  upsertSlotsBatch,
+  replaceSlotsForTrip,
+  deleteTripById,
+  deleteTruckById,
 } from "./planningApi.js";
 
 let orderTemplates = [];
@@ -38,6 +40,10 @@ const state = {
   pendingPlacement: null, // {truckId, tripIndex, orderId, startSlotIndex}
   pendingShapeSelection: null, // {truckId, tripIndex, slotIndex}
 };
+
+function logPersistenceError(action, error) {
+  console.error(`Fout bij lokaal opslaan (${action}):`, error);
+}
 
 // welke rit is actief in de kaart-overlay
 let activeMapTripIndex = 0;
@@ -735,7 +741,7 @@ async function addTripForSelectedTruck() {
 }
 
 // Rit verwijderen uit geselecteerde truck
-function deleteTripForSelectedTruck(tripIndex) {
+async function deleteTripForSelectedTruck(tripIndex) {
   const truck = getTruckById(state.selectedTruckId);
   if (!truck) return;
 
@@ -750,6 +756,11 @@ function deleteTripForSelectedTruck(tripIndex) {
   if (hasOrders) {
     alert("Deze rit bevat geplaatste orders. Verwijder eerst alle pallets.");
     return;
+  }
+
+  const tripId = truck.trips[tripIndex]?.id;
+  if (tripId) {
+    await deleteTripById(tripId);
   }
 
   // Verwijderen
@@ -1481,6 +1492,9 @@ function handleShapeChoice(newShape) {
   if (trip.slots[slotIndex].shape !== prevShape) {
     renderTrips(truck);
     triggerSlotMorphAnimation(tripIndex, slotIndex, prevShape, trip.slots[slotIndex].shape);
+    persistTripState(truck, tripIndex).catch((error) => {
+      logPersistenceError("slot-vorm wijzigen", error);
+    });
   }
 
   closeShapeOverlay();
@@ -1525,9 +1539,8 @@ function hideDeleteTripConfirm() {
 }
 
 document.getElementById("delete-trip-no").addEventListener("click", hideDeleteTripConfirm);
-document.getElementById("delete-trip-yes").addEventListener("click", () => {
-  const truck = getTruckById(state.selectedTruckId);
-  deleteTripForSelectedTruck(pendingTripDeleteIndex);
+document.getElementById("delete-trip-yes").addEventListener("click", async () => {
+  await deleteTripForSelectedTruck(pendingTripDeleteIndex);
   hideDeleteTripConfirm();
 });
 
@@ -1676,19 +1689,18 @@ function placeOrderInAdjacentSlots(truck, tripIndex, order, startIndex, count) {
   return true;
 }
 
-async function persistOrderPlacement(truck, tripIndex, order, slotIndices) {
+async function persistTripState(truck, tripIndex) {
   const trip = truck.trips[tripIndex];
   const tripId = trip.id;
   if (!tripId) return;
 
-  const rows = slotIndices.map((idx) => ({
-    trip_id: tripId,
+  const rows = trip.slots.map((slot, idx) => ({
     index: idx,
-    shape: trip.slots[idx].shape || "square",
-    sap_order_id: order.id,
+    shape: slot.shape || "square",
+    sap_order_id: slot.orderId || null,
   }));
 
-  await upsertSlotsBatch(rows);
+  await replaceSlotsForTrip(tripId, rows);
 }
 
 // Bepaal hoeveel pallets er maximaal geplaatst kunnen worden
@@ -1767,6 +1779,9 @@ function handleSlotClick(truck, tripIndex, slotIndex) {
 
       renderTrips(truck);
       renderOrders(truck);
+      persistTripState(truck, tripIndex).catch((error) => {
+        logPersistenceError("order verwijderen", error);
+      });
     };
 
     if (slotEl) {
@@ -1850,7 +1865,7 @@ function goToNextTruck() {
   playSwipeIn(detailPageEl, "left");
 }
 
-function deleteCurrentTruck() {
+async function deleteCurrentTruck() {
   const day = getCurrentDay();
   if (!day || state.selectedTruckId == null) return;
 
@@ -1867,6 +1882,8 @@ function deleteCurrentTruck() {
   const idx = getTruckIndex(state.selectedTruckId);
   if (idx === -1) return;
 
+  const truckId = state.selectedTruckId;
+  await deleteTruckById(truckId);
   day.trucks.splice(idx, 1);
 
   if (day.trucks.length === 0) {
@@ -1952,11 +1969,11 @@ nextTruckBtn.addEventListener("click", () => {
   goToNextTruck();
 });
 
-deleteTruckBtn.addEventListener("click", () => {
+deleteTruckBtn.addEventListener("click", async () => {
   hideOrderDetail();
   hideMap();
   closeSlotCountOverlay();
-  deleteCurrentTruck();
+  await deleteCurrentTruck();
 });
 
 /* Shape-select events */
@@ -2052,10 +2069,10 @@ async function handleSlotCountConfirm() {
         renderOrders(truck);
         animateSlots(tripIndex, order.occupiedSlots, "slot-placed", 450);
 
-        // daarna Supabase opslaan, zonder de UI te blokkeren
-        persistOrderPlacement(truck, tripIndex, order, order.occupiedSlots)
+        // daarna lokaal opslaan, zonder de UI te blokkeren
+        persistTripState(truck, tripIndex)
         .catch((err) => {
-        console.error("Fout bij opslaan in Supabase:", err);
+        logPersistenceError("order plaatsen", err);
         // eventueel nog een toast / melding laten zien
         });
     }
@@ -2153,4 +2170,7 @@ async function init() {
   showListView();
 }
 
-init();
+init().catch((error) => {
+  console.error("Fout tijdens initialiseren van de planner:", error);
+  alert("De planner kon niet worden gestart. Bekijk de console voor details.");
+});
