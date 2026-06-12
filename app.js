@@ -1,4 +1,5 @@
 import { fetchOrderTemplatesForDate } from "./ordersApi.js";
+import { CITY_COORDS } from "./locationCoords.js";
 import {
   ensureDayRow,
   loadPlanningForDay,
@@ -20,15 +21,6 @@ const START_LOCATION = {
   lat: 52.3508, // Almere in jouw voorbeeld
   lng: 5.2647,
   label: "Start: Almere – Wittevrouwen 1",
-};
-
-// Dummy coördinaten per stad (kan later echte geocoding worden)
-const CITY_COORDS = {
-  Amsterdam: { lat: 52.3728, lng: 4.8936 },
-  Rotterdam: { lat: 51.9225, lng: 4.4792 },
-  Utrecht: { lat: 52.0907, lng: 5.1214 },
-  Eindhoven: { lat: 51.4416, lng: 5.4697 },
-  "Den Haag": { lat: 52.0705, lng: 4.3007 },
 };
 
 // Globale state
@@ -751,24 +743,30 @@ async function deleteTripForSelectedTruck(tripIndex) {
   }
 
   // Check of er orders in zitten
-  const hasOrders = truck.orders.some(o => o.tripIndex === tripIndex);
+  const hasOrders = truck.orders.some(
+    (o) => o.tripIndex === tripIndex && o.occupiedSlots && o.occupiedSlots.length > 0
+  );
 
   if (hasOrders) {
     alert("Deze rit bevat geplaatste orders. Verwijder eerst alle pallets.");
     return;
   }
 
-  const tripId = truck.trips[tripIndex]?.id;
-  if (tripId) {
+  try {
+    const tripId = truck.trips[tripIndex]?.id;
+    if (!tripId) {
+      console.error("Geen geldige trip-id gevonden voor verwijdering.");
+      return;
+    }
+
     await deleteTripById(tripId);
+    truck.trips.splice(tripIndex, 1);
+
+    renderTrips(truck);
+  } catch (err) {
+    console.error("Kon rit niet verwijderen:", err);
+    alert("Er ging iets mis bij het verwijderen van deze rit.");
   }
-
-  // Verwijderen
-  truck.trips.splice(tripIndex, 1);
-
-  // indexen herstellen voor orders maar er zijn geen orders meer, dus safe
-
-  renderTrips(truck);
 }
 
 // Slots / orders renderen per rit
@@ -794,24 +792,48 @@ function renderSlotsForTrip(truck, tripIndex, gridEl) {
       (left && left.shape === "rect") || (right && right.shape === "rect");
 
     const createSlotEl = (slotObj, idx) => {
-      const slotEl = document.createElement("div");
-      slotEl.classList.add("slot", slotObj.shape === "rect" ? "rect" : "square");
-      slotEl.dataset.index = idx;
+    const slotEl = document.createElement("div");
+    slotEl.classList.add("slot", slotObj.shape === "rect" ? "rect" : "square");
+    slotEl.dataset.index = idx;
 
-      if (slotObj.orderId === null) {
+    if (slotObj.orderId === null) {
+        // Leeg vak
         slotEl.classList.add("empty");
-      } else {
+    } else {
+        // Gevuld vak → icoon + label
         slotEl.classList.add("filled");
+
         const order = truck.orders.find((o) => o.id === slotObj.orderId);
-        slotEl.textContent = order ? order.label.replace("Order ", "") : "?";
-      }
 
-      slotEl.addEventListener("click", () => {
+        // wrapper binnen het slot
+        const content = document.createElement("div");
+        content.className = "slot-content";
+
+        // pallet-icoon
+        const icon = document.createElement("div");
+        icon.classList.add("pallet-icon");
+        // Als je later een andere icon voor blok wilt:
+        // icon.classList.add(slotObj.shape === "rect" ? "pallet-blok" : "pallet-euro");
+
+        // label met ordercode
+        const label = document.createElement("span");
+        label.className = "slot-label";
+        label.textContent = order
+        ? order.label.replace("Order ", "")
+        : "?";
+
+        content.appendChild(icon);
+        content.appendChild(label);
+        slotEl.appendChild(content);
+    }
+
+    slotEl.addEventListener("click", () => {
         handleSlotClick(truck, tripIndex, idx);
-      });
+    });
 
-      return slotEl;
+    return slotEl;
     };
+
 
     if (left) rowDiv.appendChild(createSlotEl(left, leftIdx));
     if (!rowHasRect && mid) rowDiv.appendChild(createSlotEl(mid, midIdx));
@@ -1320,7 +1342,7 @@ function showMap() {
   const defaultBtn = document.createElement("button");
   defaultBtn.className = "map-trip-tab";
   defaultBtn.dataset.mode = "default";
-  defaultBtn.textContent = "Basisroute";
+  defaultBtn.textContent = "Default";
 
   defaultBtn.style.flex = "1";
   defaultBtn.style.padding = "6px 8px";

@@ -38,6 +38,7 @@ function sortByTruckName(a, b) {
   });
 }
 
+/** Zorg dat er een day-record bestaat voor een datum (YYYY-MM-DD). */
 export async function ensureDayRow(dateStr) {
   const store = loadOfflineStore();
   const planning = getPlanning(store);
@@ -55,6 +56,7 @@ export async function ensureDayRow(dateStr) {
   return day.id;
 }
 
+/** Haal trucks + trips + slots voor een day-id op. */
 export async function loadPlanningForDay(dayId) {
   const store = loadOfflineStore();
   const planning = getPlanning(store);
@@ -97,6 +99,7 @@ export async function loadPlanningForDay(dayId) {
     }));
 }
 
+/** Maak een truck + eerste trip (sequence = 0) voor een dag. */
 export async function createTruckForDay(dayId, name) {
   const store = loadOfflineStore();
   const planning = getPlanning(store);
@@ -124,8 +127,32 @@ export async function createTruckForDay(dayId, name) {
     },
     trip: {
       id: trip.id,
+      truck_id: truck.id,
+      truckId: truck.id,
       sequence: trip.sequence,
     },
+  };
+}
+
+/** Maak een extra rit voor een bestaande truck. */
+export async function createTripForTruck(truckId, sequence) {
+  const store = loadOfflineStore();
+  const planning = getPlanning(store);
+
+  const trip = {
+    id: createOfflineId(),
+    truckId,
+    sequence,
+  };
+
+  planning.trips.push(trip);
+  saveOfflineStore(store);
+
+  return {
+    id: trip.id,
+    truck_id: truckId,
+    truckId,
+    sequence: trip.sequence,
   };
 }
 
@@ -140,6 +167,7 @@ export async function upsertSlot(tripId, index, shape, sapOrderId) {
   ]);
 }
 
+/** Batch upsert van slot-rijen. */
 export async function upsertSlotsBatch(rows) {
   if (!rows || rows.length === 0) return;
 
@@ -173,6 +201,7 @@ export async function upsertSlotsBatch(rows) {
   saveOfflineStore(store);
 }
 
+/** Vervang de volledige slot-state voor een rit. */
 export async function replaceSlotsForTrip(tripId, rows) {
   const store = loadOfflineStore();
   const planning = getPlanning(store);
@@ -208,6 +237,7 @@ export async function replaceSlotsForTrip(tripId, rows) {
   saveOfflineStore(store);
 }
 
+/** Verwijder een rit + bijbehorende slots. */
 export async function deleteTripById(tripId) {
   const store = loadOfflineStore();
   const planning = getPlanning(store);
@@ -228,6 +258,12 @@ export async function deleteTripById(tripId) {
   saveOfflineStore(store);
 }
 
+// Compatibiliteitsalias voor development-branch call sites.
+export async function deleteTrip(tripId) {
+  await deleteTripById(tripId);
+}
+
+/** Verwijder een truck + alle onderliggende trips en slots. */
 export async function deleteTruckById(truckId) {
   const store = loadOfflineStore();
   const planning = getPlanning(store);
@@ -243,23 +279,4 @@ export async function deleteTruckById(truckId) {
   planning.slots = planning.slots.filter((slot) => !tripIds.has(slot.tripId));
 
   saveOfflineStore(store);
-}
-
-export async function createTripForTruck(truckId, sequence) {
-  const store = loadOfflineStore();
-  const planning = getPlanning(store);
-
-  const trip = {
-    id: createOfflineId(),
-    truckId,
-    sequence,
-  };
-
-  planning.trips.push(trip);
-  saveOfflineStore(store);
-
-  return {
-    id: trip.id,
-    sequence: trip.sequence,
-  };
 }
